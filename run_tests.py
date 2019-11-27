@@ -1,0 +1,170 @@
+"""BSD 2-Clause License
+
+Copyright (c) 2019, Allied Vision Technologies GmbH
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+THE SOFTWARE IS PRELIMINARY AND STILL IN TESTING AND VERIFICATION PHASE AND
+IS PROVIDED ON AN “AS IS” AND “AS AVAILABLE” BASIS AND IS BELIEVED TO CONTAIN DEFECTS.
+A PRIMARY PURPOSE OF THIS EARLY ACCESS IS TO OBTAIN FEEDBACK ON PERFORMANCE AND
+THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
+"""
+
+import os
+import shutil
+import subprocess
+import docopt
+
+
+def fprint(line):
+    print(line, flush=True)
+
+
+def stringify_list(l):
+    list_str = ''
+    for e in l:
+        list_str += e + ' '
+
+    return list_str
+
+
+def static_test():
+    fprint('Execute Static Test: flake8')
+    subprocess.run('flake8 vimba', shell=True)
+    fprint('')
+
+    fprint('Execute Static Test: mypy')
+    subprocess.run('mypy vimba', shell=True)
+    fprint('')
+
+
+def unit_test(testsuite, testcamera):
+    fprint('Execute Unit tests and measure coverage:')
+    if testsuite == 'basic':
+        cmd = 'coverage run Test/runner.py -s basic -o console'
+
+    else:
+        cmd = 'coverage run Test/runner.py -s {} -c {} -o console'
+        cmd = cmd.format(testsuite, testcamera)
+
+    subprocess.run(cmd, shell=True)
+    fprint('')
+
+    fprint('Coverage during test execution:')
+    subprocess.run('coverage report -m', shell=True)
+    fprint('')
+
+    coverage_file = '.coverage'
+    if os.path.exists(coverage_file):
+        os.remove(coverage_file)
+
+
+def setup_junit(report_dir):
+    if os.path.exists(report_dir):
+        shutil.rmtree(report_dir, ignore_errors=True)
+
+    os.mkdir(report_dir)
+
+
+def static_test_junit(report_dir):
+    fprint('Execute Static Test: flake8')
+    cmd = 'flake8 vimba --output-file=' + report_dir + '/flake8.txt'
+    subprocess.run(cmd, shell=True)
+    cmd = 'flake8_junit ' + report_dir + '/flake8.txt ' + report_dir + '/flake8_junit.xml'
+    subprocess.run(cmd, shell=True)
+    fprint('')
+
+    fprint('Execute Static Test: mypy')
+    cmd = 'mypy vimba --junit-xml ' + report_dir + '/mypy_junit.xml'
+    subprocess.run(cmd, shell=True)
+    fprint('')
+
+
+def unit_test_junit(report_dir, testsuite, testcamera):
+    fprint('Execute Unit tests and measure coverage:')
+
+    if testsuite == 'basic':
+        cmd = 'coverage run Test/runner.py -s basic -o junit_xml {}'.format(report_dir)
+
+    else:
+        cmd = 'coverage run Test/runner.py -s {} -c {} -o junit_xml {}'
+        cmd = cmd.format(testsuite, testcamera, report_dir)
+
+    subprocess.run(cmd, shell=True)
+    fprint('')
+
+    fprint('Generate Coverage reports:')
+    subprocess.run('coverage xml -o ' + report_dir + '/coverage.xml', shell=True)
+    subprocess.run('coverage html -d ' + report_dir + '/coverage_html', shell=True)
+    fprint('')
+
+    coverage_file = '.coverage'
+    if os.path.exists(coverage_file):
+        os.remove(coverage_file)
+
+
+def test(testsuite, testcamera):
+    static_test()
+    unit_test(testsuite, testcamera)
+
+
+def test_junit(report_dir, testsuite, testcamera):
+    setup_junit(report_dir)
+    static_test_junit(report_dir)
+    unit_test_junit(report_dir, testsuite, testcamera)
+
+
+def main():
+    CLI = """VimbaPython tests script.
+    Usage:
+        run_tests.py -h
+        run_tests.py test -s basic
+        run_tests.py test -s (real_cam | all) -c CAMERA_ID
+        run_tests.py test_junit -s basic
+        run_tests.py test_junit -s (real_cam | all) -c CAMERA_ID
+
+    Arguments:
+        CAMERA_ID    Camera Id from Camera that shall be used during testing
+
+    Options:
+        -h   Show this screen.
+        -s   Unittestsuite. Can be 'basic', 'real_cam' or 'all'. The last two require a
+             Camera Id to test against.
+        -c   Camera Id used in testing.
+    """
+
+    args = docopt.docopt(CLI)
+
+    suite = 'basic' if args['basic'] else 'real_cam' if args['real_cam'] else 'all'
+    cam = args['CAMERA_ID']
+
+    if args['test']:
+        test(suite, cam)
+
+    elif args['test_junit']:
+        report_dir = 'Test_Reports'
+        test_junit(report_dir, suite, cam)
+
+
+if __name__ == '__main__':
+    main()
