@@ -143,7 +143,7 @@ def setup_camera(cam: Camera):
                 abort('Camera does not support a OpenCV compatible format natively. Abort.')
 
 
-class FrameHandler:
+class Handler:
     def __init__(self):
         self.shutdown_event = threading.Event()
 
@@ -172,7 +172,7 @@ def main():
 
             # Start Streaming, wait for five seconds, stop streaming
             setup_camera(cam)
-            handler = FrameHandler()
+            handler = Handler()
 
             try:
                 # Start Streaming with a custom a buffer of 10 Frames (defaults to 5)

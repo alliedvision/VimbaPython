@@ -89,7 +89,7 @@ def main():
 
     # Select TestRunner
     if args['console']:
-        runner = unittest.TextTestRunner(verbosity=1)
+        runner = unittest.TextTestRunner(verbosity=2)
 
     elif args['junit_xml']:
         import xmlrunner
@@ -99,26 +99,32 @@ def main():
     import tests.c_binding_test
     import tests.util_runtime_type_check_test
     import tests.util_tracer_test
+    import tests.util_context_decorator_test
     import tests.vimba_test
+    import tests.interface_test
 
     import real_cam_tests.vimba_test
     import real_cam_tests.feature_test
     import real_cam_tests.camera_test
     import real_cam_tests.frame_test
+    import real_cam_tests.ancillary_data_test
 
     # Assign test cases to test suites
     BASIC_TEST_MODS = [
         tests.c_binding_test,
         tests.util_runtime_type_check_test,
         tests.util_tracer_test,
-        tests.vimba_test
+        tests.util_context_decorator_test,
+        tests.vimba_test,
+        tests.interface_test
     ]
 
     REAL_CAM_TEST_MODS = [
         real_cam_tests.vimba_test,
         real_cam_tests.feature_test,
         real_cam_tests.camera_test,
-        real_cam_tests.frame_test
+        real_cam_tests.frame_test,
+        real_cam_tests.ancillary_data_test
     ]
 
     # Prepare TestSuites

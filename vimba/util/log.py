@@ -61,14 +61,14 @@ __all__ = [
 
 
 class LogLevel(enum.IntEnum):
-    """ Enumeration containing all LogLevels.
+    """Enum containing all LogLevels.
 
-    Enumeration values are:
-        Trace    - Show Tracing information. Show all Messages
-        Info     - Show Informational, Warning, Error and Critical Events.
-        Warning  - Show Warning, Error and Critical Events.
+    Enum values are:
+        Trace    - Show Tracing information. Show all messages.
+        Info     - Show Informational, Warning, Error, and Critical Events.
+        Warning  - Show Warning, Error, and Critical Events.
         Error    - Show Errors and Critical Events.
-        Critical - Show only Critical Events.
+        Critical - Show Critical Events only.
     """
     Trace = logging.DEBUG
     Info = logging.INFO
@@ -93,8 +93,8 @@ _LEVEL_TO_EQUAL_LEN_STR = {
 
 
 class LogConfig:
-    """ The LogConfig is a builder to configure various specialized Logging Configurations.
-    The constructed LogConfig must set via vimba.System or the ScopedLogEnable Decorator
+    """The LogConfig is a builder to configure various specialized logging configurations.
+    The constructed LogConfig must set via vimba.Vimba or the ScopedLogEnable Decorator
     to start logging.
     """
 
@@ -141,7 +141,7 @@ class LogConfig:
         return self
 
     def set_max_msg_length(self, max_msg_length: int):
-        """Set max length of a log entry. Messages long than that entry will be cutoff."""
+        """Set max length of a log entry. Messages longer than this entry will be cut off."""
         self.__max_msg_length = max_msg_length
 
     def get_max_msg_length(self) -> Optional[int]:

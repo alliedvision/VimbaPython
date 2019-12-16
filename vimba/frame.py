@@ -33,15 +33,18 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 import enum
 import ctypes
 import copy
+import functools
 
 from typing import Optional, Tuple
 from .c_binding import create_string_buffer, byref, sizeof, decode_flags
 from .c_binding import call_vimba_c, call_vimba_image_transform, VmbFrameStatus, VmbFrameFlags, \
                        VmbFrame, VmbHandle, VmbPixelFormat, VmbImage, VmbDebayerMode, \
                        VmbTransformInfo, PIXEL_FORMAT_CONVERTIBILITY_MAP, PIXEL_FORMAT_TO_LAYOUT
-from .feature import FeaturesTuple, FeatureTypes, discover_features
+from .feature import FeaturesTuple, FeatureTypes, FeatureTypeTypes, discover_features
 from .shared import filter_features_by_name, filter_features_by_type, filter_features_by_category
-from .util import TraceEnable, RuntimeTypeCheckEnable
+
+from .util import TraceEnable, RuntimeTypeCheckEnable, EnterContextOnCall, LeaveContextOnCall, \
+                  RaiseIfOutsideContext
 
 try:
     import numpy  # type: ignore
@@ -77,6 +80,114 @@ FormatTuple = Tuple['PixelFormat', ...]
 
 
 class PixelFormat(enum.IntEnum):
+    """Enum specifying all PixelFormats. Note: Not all Cameras support all Pixelformats.
+
+    Mono formats:
+        Mono8        - Monochrome, 8 bits (PFNC:Mono8)
+        Mono10       - Monochrome, 10 bits in 16 bits (PFNC:Mono10)
+        Mono10p      - Monochrome, 4x10 bits continuously packed in 40 bits
+                       (PFNC:Mono10p)
+        Mono12       - Monochrome, 12 bits in 16 bits (PFNC:Mono12)
+        Mono12Packed - Monochrome, 2x12 bits in 24 bits (GEV:Mono12Packed)
+        Mono12p      - Monochrome, 2x12 bits continuously packed in 24 bits
+                       (PFNC:Mono12p)
+        Mono14       - Monochrome, 14 bits in 16 bits (PFNC:Mono14)
+        Mono16       - Monochrome, 16 bits (PFNC:Mono16)
+
+    Bayer formats:
+        BayerGR8        - Bayer-color, 8 bits, starting with GR line
+                          (PFNC:BayerGR8)
+        BayerRG8        - Bayer-color, 8 bits, starting with RG line
+                          (PFNC:BayerRG8)
+        BayerGB8        - Bayer-color, 8 bits, starting with GB line
+                          (PFNC:BayerGB8)
+        BayerBG8        - Bayer-color, 8 bits, starting with BG line
+                          (PFNC:BayerBG8)
+        BayerGR10       - Bayer-color, 10 bits in 16 bits, starting with GR
+                          line (PFNC:BayerGR10)
+        BayerRG10       - Bayer-color, 10 bits in 16 bits, starting with RG
+                          line (PFNC:BayerRG10)
+        BayerGB10       - Bayer-color, 10 bits in 16 bits, starting with GB
+                          line (PFNC:BayerGB10)
+        BayerBG10       - Bayer-color, 10 bits in 16 bits, starting with BG
+                          line (PFNC:BayerBG10)
+        BayerGR12       - Bayer-color, 12 bits in 16 bits, starting with GR
+                          line (PFNC:BayerGR12)
+        BayerRG12       - Bayer-color, 12 bits in 16 bits, starting with RG
+                          line (PFNC:BayerRG12)
+        BayerGB12       - Bayer-color, 12 bits in 16 bits, starting with GB
+                          line (PFNC:BayerGB12)
+        BayerBG12       - Bayer-color, 12 bits in 16 bits, starting with BG
+                          line (PFNC:BayerBG12)
+        BayerGR12Packed - Bayer-color, 2x12 bits in 24 bits, starting with GR
+                          line (GEV:BayerGR12Packed)
+        BayerRG12Packed - Bayer-color, 2x12 bits in 24 bits, starting with RG
+                          line (GEV:BayerRG12Packed)
+        BayerGB12Packed - Bayer-color, 2x12 bits in 24 bits, starting with GB
+                          line (GEV:BayerGB12Packed)
+        BayerBG12Packed - Bayer-color, 2x12 bits in 24 bits, starting with BG
+                          line (GEV:BayerBG12Packed)
+        BayerGR10p      - Bayer-color, 4x10 bits continuously packed in 40
+                          bits, starting with GR line (PFNC:BayerGR10p)
+        BayerRG10p      - Bayer-color, 4x10 bits continuously packed in 40
+                          bits, starting with RG line (PFNC:BayerRG10p)
+        BayerGB10p      - Bayer-color, 4x10 bits continuously packed in 40
+                          bits, starting with GB line (PFNC:BayerGB10p)
+        BayerBG10p      - Bayer-color, 4x10 bits continuously packed in 40
+                          bits, starting with BG line (PFNC:BayerBG10p)
+        BayerGR12p      - Bayer-color, 2x12 bits continuously packed in 24
+                          bits, starting with GR line (PFNC:BayerGR12p)
+        BayerRG12p      - Bayer-color, 2x12 bits continuously packed in 24
+                          bits, starting with RG line (PFNC:BayerRG12p)
+        BayerGB12p      - Bayer-color, 2x12 bits continuously packed in 24
+                          bits, starting with GB line (PFNC:BayerGB12p)
+        BayerBG12p      - Bayer-color, 2x12 bits continuously packed in 24
+                          bits, starting with BG line (PFNC:BayerBG12p)
+        BayerGR16       - Bayer-color, 16 bits, starting with GR line
+                          (PFNC:BayerGR16)
+        BayerRG16       - Bayer-color, 16 bits, starting with RG line
+                          (PFNC:BayerRG16)
+        BayerGB16       - Bayer-color, 16 bits, starting with GB line
+                          (PFNC:BayerGB16)
+        BayerBG16       - Bayer-color, 16 bits, starting with BG line
+                          (PFNC:BayerBG16)
+
+    RGB formats:
+        Rgb8  - RGB, 8 bits x 3 (PFNC:RGB8)
+        Bgr8  - BGR, 8 bits x 3 (PFNC:Bgr8)
+        Rgb10 - RGB, 10 bits in 16 bits x 3 (PFNC:RGB10)
+        Bgr10 - BGR, 10 bits in 16 bits x 3 (PFNC:BGR10)
+        Rgb12 - RGB, 12 bits in 16 bits x 3 (PFNC:RGB12)
+        Bgr12 - BGR, 12 bits in 16 bits x 3 (PFNC:BGR12)
+        Rgb14 - RGB, 14 bits in 16 bits x 3 (PFNC:RGB14)
+        Bgr14 - BGR, 14 bits in 16 bits x 3 (PFNC:BGR14)
+        Rgb16 - RGB, 16 bits x 3 (PFNC:RGB16)
+        Bgr16 - BGR, 16 bits x 3 (PFNC:BGR16)
+
+    RGBA formats:
+        Argb8  - ARGB, 8 bits x 4 (PFNC:RGBa8)
+        Rgba8  - RGBA, 8 bits x 4, legacy name
+        Bgra8  - BGRA, 8 bits x 4 (PFNC:BGRa8)
+        Rgba10 - RGBA, 10 bits in 16 bits x 4
+        Bgra10 - BGRA, 10 bits in 16 bits x 4
+        Rgba12 - RGBA, 12 bits in 16 bits x 4
+        Bgra12 - BGRA, 12 bits in 16 bits x 4
+        Rgba14 - RGBA, 14 bits in 16 bits x 4
+        Bgra14 - BGRA, 14 bits in 16 bits x 4
+        Rgba16 - RGBA, 16 bits x 4
+        Bgra16 - BGRA, 16 bits x 4
+
+    YUV/YCbCr formats:
+        Yuv411              -  YUV 411 with 8 bits (GEV:YUV411Packed)
+        Yuv422              -  YUV 422 with 8 bits (GEV:YUV422Packed)
+        Yuv444              -  YUV 444 with 8 bits (GEV:YUV444Packed)
+        YCbCr411_8_CbYYCrYY -  Y´CbCr 411 with 8 bits
+                               (PFNC:YCbCr411_8_CbYYCrYY) - identical to Yuv411
+        YCbCr422_8_CbYCrY   -  Y´CbCr 422 with 8 bits
+                               (PFNC:YCbCr422_8_CbYCrY) - identical to Yuv422
+        YCbCr8_CbYCr        -  Y´CbCr 444 with 8 bits
+                               (PFNC:YCbCr8_CbYCr) - identical to Yuv444
+    """
     # Mono Formats
     Mono8 = VmbPixelFormat.Mono8
     Mono10 = VmbPixelFormat.Mono10
@@ -269,6 +380,17 @@ OPENCV_PIXEL_FORMATS = (
 
 
 class Debayer(enum.IntEnum):
+    """Enum specifying debayer modes.
+
+    Enum values:
+        Mode2x2    - 2x2 with green averaging (this is the default if no debayering algorithm
+                     is added as transformation option).
+        Mode3x3    - 3x3 with equal green weighting per line (8-bit images only).
+        ModeLCAA   - Debayering with horizontal local color anti-aliasing (8-bit images only).
+        ModeLCAAV  - Debayering with horizontal and vertical local color anti-aliasing
+        (            8-bit images only).
+        ModeYuv422 - Debayering with YUV422-alike sub-sampling (8-bit images only).
+    """
     Mode2x2 = VmbDebayerMode.Mode_2x2
     Mode3x3 = VmbDebayerMode.Mode_3x3
     ModeLCAA = VmbDebayerMode.Mode_LCAA
@@ -283,6 +405,15 @@ class Debayer(enum.IntEnum):
 
 
 class FrameStatus(enum.IntEnum):
+    """Enum specifying the current status of internal Frame data.
+
+    Enum values:
+        Complete   - Frame data is complete without errors.
+        Incomplete - Frame could not be filled to the end.
+        TooSmall   - Frame buffer was too small.
+        Invalid    - Frame buffer was invalid.
+    """
+
     Complete = VmbFrameStatus.Complete
     Incomplete = VmbFrameStatus.Incomplete
     TooSmall = VmbFrameStatus.TooSmall
@@ -294,12 +425,13 @@ class AncillaryData:
     Ancillary Data are Features stored within a Frame.
     """
     @TraceEnable()
+    @LeaveContextOnCall()
     def __init__(self, handle: VmbFrame):
         """Do not call directly. Get Object via Frame access method"""
         self.__handle: VmbFrame = handle
         self.__data_handle: VmbHandle = VmbHandle()
         self.__feats: FeaturesTuple = ()
-        self.__context_cnt = 0
+        self.__context_cnt: int = 0
 
     @TraceEnable()
     def __enter__(self):
@@ -316,17 +448,21 @@ class AncillaryData:
         if not self.__context_cnt:
             self._close()
 
+    @RaiseIfOutsideContext()
     def get_all_features(self) -> FeaturesTuple:
         """Get all features in ancillary data.
 
         Returns:
-            A set of all currently features store in Ancillary Data.
-            Returns an empty set then called outside of 'with' - statement.
+            A set of all currently features stored in Ancillary Data.
+
+        Raises:
+            RuntimeError then called outside of "with" - statement.
         """
         return self.__feats
 
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def get_features_by_type(self, feat_type: FeatureTypes) -> FeaturesTuple:
+    def get_features_by_type(self, feat_type: FeatureTypeTypes) -> FeaturesTuple:
         """Get all features in ancillary data of a specific type.
 
         Valid FeatureTypes are: IntFeature, FloatFeature, StringFeature, BoolFeature,
@@ -336,14 +472,15 @@ class AncillaryData:
             feat_type - FeatureType used find features of that type.
 
         Returns:
-            A set of features of type 'feat_type'. Can be an empty set if there is
-            no feature with the given type available.
+            A all features of type 'feat_type'.
 
         Raises:
+            RuntimeError then called outside of "with" - statement.
             TypeError if parameters do not match their type hint.
         """
         return filter_features_by_type(self.__feats, feat_type)
 
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_features_by_category(self, category: str) -> FeaturesTuple:
         """Get all features in ancillary data of a specific category.
@@ -352,14 +489,15 @@ class AncillaryData:
             category - Category that should be used for filtering.
 
         Returns:
-            A set of features of category 'category'. Can be an empty set if there is
-            no feature of that category.
+            A all features of category 'category'.
 
         Raises:
+            RuntimeError then called outside of "with" - statement.
             TypeError if parameters do not match their type hint.
         """
         return filter_features_by_category(self.__feats, category)
 
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_feature_by_name(self, feat_name: str) -> FeatureTypes:
         """Get a features in ancillary data by its name.
@@ -371,18 +509,21 @@ class AncillaryData:
             Feature with the associated name.
 
         Raises:
+            RuntimeError then called outside of "with" - statement.
             TypeError if parameters do not match their type hint.
             VimbaFeatureError if no feature is associated with 'feat_name'.
         """
         return filter_features_by_name(self.__feats, feat_name)
 
     @TraceEnable()
+    @EnterContextOnCall()
     def _open(self):
         call_vimba_c('VmbAncillaryDataOpen', byref(self.__handle), byref(self.__data_handle))
 
-        self.__feats = discover_features(self.__data_handle)
+        self.__feats = _replace_invalid_feature_calls(discover_features(self.__data_handle))
 
     @TraceEnable()
+    @LeaveContextOnCall()
     def _close(self):
         call_vimba_c('VmbAncillaryDataClose', self.__data_handle)
 
@@ -390,12 +531,48 @@ class AncillaryData:
         self.__feats = ()
 
 
+def _replace_invalid_feature_calls(feats: FeaturesTuple) -> FeaturesTuple:
+    # AncillaryData are basically "lightweight" features. Calling most feature related
+    # Functions with a AncillaryData - Handle leads to VimbaC Errors. This method decorates
+    # all Methods that are unsafe to call with a decorator raising a RuntimeError.
+    to_wrap = [
+        'get_access_mode',
+        'is_readable',
+        'is_writeable',
+        'register_change_handler',
+        'get_increment',
+        'get_range',
+        'set'
+    ]
+
+    # Decorator raising a RuntimeError instead of delegating call to inner function.
+    def invalid_call(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            msg = 'Calling \'{}\' is invalid for AncillaryData Features.'
+            raise RuntimeError(msg.format(func.__name__))
+
+        return wrapper
+
+    # Replace original implementation by injecting a surrounding decorator and
+    # binding the resulting function as a method to the Feature instance.
+    for f, a in [(f, a) for f in feats for a in to_wrap]:
+        try:
+            fn = invalid_call(getattr(f, a))
+            setattr(f, a, fn.__get__(f))
+
+        except AttributeError:
+            pass
+
+    return feats
+
+
 class Frame:
-    """This class allows access a Frames acquired by a Camera. The Frame is basically
-    a buffer containing image data and some metadata.
+    """This class allows access to Frames acquired by a camera. The Frame is basically
+    a buffer that wraps image data and some metadata.
     """
     def __init__(self, buffer_size: int):
-        """Do not call directly. Create Frame via Camera methods instead."""
+        """Do not call directly. Create Frames via Camera methods instead."""
         self._buffer = create_string_buffer(buffer_size)
         self._frame: VmbFrame = VmbFrame()
 
@@ -437,8 +614,8 @@ class Frame:
     def get_ancillary_data(self) -> Optional[AncillaryData]:
         """Get AncillaryData.
 
-        Frames acquired with Cameras where Feature ChunkModeActive is enabled, can contain
-        Ancillary Data within the image data.
+        Frames acquired with cameras where Feature ChunkModeActive is enabled can contain
+        ancillary data within the image data.
 
         Returns:
             None if Frame contains no ancillary data.
@@ -454,14 +631,14 @@ class Frame:
         return FrameStatus(self._frame.receiveStatus)
 
     def get_pixel_format(self) -> PixelFormat:
-        """Get format of the acquired image data """
+        """Get format of the acquired image data"""
         return PixelFormat(self._frame.pixelFormat)
 
     def get_height(self) -> Optional[int]:
-        """Get image height in pixel.
+        """Get image height in pixels.
 
         Returns:
-            Image height in pixel if dimension data is provided by the camera.
+            Image height in pixels if dimension data is provided by the camera.
             None if dimension data is not provided by the camera.
         """
         flags = decode_flags(VmbFrameFlags, self._frame.receiveFlags)
@@ -472,10 +649,10 @@ class Frame:
         return self._frame.height
 
     def get_width(self) -> Optional[int]:
-        """Get image width in pixel.
+        """Get image width in pixels.
 
         Returns:
-            Image width in pixel if dimension data is provided by the camera.
+            Image width in pixels if dimension data is provided by the camera.
             None if dimension data is not provided by the camera.
         """
         flags = decode_flags(VmbFrameFlags, self._frame.receiveFlags)
@@ -486,7 +663,7 @@ class Frame:
         return self._frame.width
 
     def get_offset_x(self) -> Optional[int]:
-        """Get horizontal offset in pixel.
+        """Get horizontal offset in pixels.
 
         Returns:
             Horizontal offset in pixel if offset data is provided by the camera.
@@ -500,10 +677,10 @@ class Frame:
         return self._frame.offsetX
 
     def get_offset_y(self) -> Optional[int]:
-        """Get vertical offset in pixel.
+        """Get vertical offset in pixels.
 
         Returns:
-            Vertical offset in pixel if offset data is provided by the camera.
+            Vertical offset in pixels if offset data is provided by the camera.
             None if offset data is not provided by the camera.
         """
         flags = decode_flags(VmbFrameFlags, self._frame.receiveFlags)
@@ -547,22 +724,22 @@ class Frame:
         """Convert internal pixel format to given format.
 
         Note: This method allocates a new buffer for internal image data leading to some
-        runtime overhead. For Performance Reasons, it might be better to set the value
-        of the cameras 'PixelFormat' -Feature instead. In addition a non-default debayer mode
+        runtime overhead. For performance reasons, it might be better to set the value
+        of the camera's 'PixelFormat' feature instead. In addition, a non-default debayer mode
         can be specified.
 
         Arguments:
             target_fmt - PixelFormat to convert to.
-            debayer_mode - Non-default Algorithm used to debayer Images in Bayer Formats. If
-                           no mode is specified, debayering mode 'Mode2x2' is used. In the
-                           current format is no Bayer format, this parameter will be silently
+            debayer_mode - Non-default algorithm used to debayer images in Bayer Formats. If
+                           no mode is specified, default debayering mode 'Mode2x2' is applied. If
+                           the current format is no Bayer format, this parameter is silently
                            ignored.
 
         Raises:
             TypeError if parameters do not match their type hint.
-            ValueError if current format can't be converted into 'target_fmt'. Convertible
+            ValueError if the current format can't be converted into 'target_fmt'. Convertible
                 Formats can be queried via get_convertible_formats() of PixelFormat.
-            AssertionError if Image width or height can't be determined.
+            AssertionError if image width or height can't be determined.
         """
 
         global BAYER_PIXEL_FORMATS
@@ -628,13 +805,13 @@ class Frame:
         self._frame.pixelFormat = target_fmt
 
     def as_numpy_ndarray(self) -> 'numpy.ndarray':
-        """ Construct numpy.ndarray view on VimbaFrame
+        """Construct numpy.ndarray view on VimbaFrame.
 
         Returns:
             numpy.ndarray on internal image buffer.
 
         Raises:
-            ImportError if numpy is not installed
+            ImportError if numpy is not installed.
         """
         if numpy is None:
             raise ImportError('\'Frame.as_opencv_image()\' requires module \'numpy\'.')
@@ -658,15 +835,15 @@ class Frame:
                              dtype=numpy.uint8 if bits_per_channel == 8 else numpy.uint16)
 
     def as_opencv_image(self) -> 'numpy.ndarray':
-        """ Construct OpenCV compatible view on VimbaFrame.
+        """Construct OpenCV compatible view on VimbaFrame.
 
         Returns:
             OpenCV compatible numpy.ndarray
 
         Raises:
             ImportError if numpy is not installed.
-            ValueError if current pixel format is not compatible to with opencv. Compatible
-                       formats are in OPENCV_PIXEL_FORMATS
+            ValueError if current pixel format is not compatible with opencv. Compatible
+                       formats are in OPENCV_PIXEL_FORMATS.
         """
         global OPENCV_PIXEL_FORMATS
 
@@ -688,11 +865,11 @@ def intersect_pixel_formats(fmts1: FormatTuple, fmts2: FormatTuple) -> FormatTup
     """Build intersection of two sets containing PixelFormat.
 
     Arguments:
-        fmts1 - PixelFormats to intersect with @p fmts2
-        fmts2 - PixelFormats to intersect with @p fmts1
+        fmts1 - PixelFormats to intersect with fmts2
+        fmts2 - PixelFormats to intersect with fmts1
 
     Returns:
-        Set of PixelFormats that occur in @p fmts1 and @p fmts2
+        Set of PixelFormats that occur in fmts1 and fmts2
 
     Raises:
             TypeError if parameters do not match their type hint.

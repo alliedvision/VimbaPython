@@ -80,7 +80,7 @@ def parse_args() -> Dict[str, Any]:
     args = sys.argv[1:]
     argc = len(args)
 
-    result = {}
+    result: Dict[str, Any] = {}
 
     if (argc <= 0) or (4 <= argc):
         abort(reason="Invalid number of arguments. Abort.", return_code=2, usage=True)
@@ -147,7 +147,7 @@ def get_camera(cam_id: Optional[str]):
         else:
             cams = vimba.get_all_cameras()
             if not cams:
-                abort('No Camera detected. Abort.'.format(cam_id))
+                abort('No Camera detected. Abort.')
 
             return cams[0]
 

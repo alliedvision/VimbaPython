@@ -39,12 +39,14 @@ from .c_binding import call_vimba_c, byref, sizeof, decode_cstr, decode_flags
 from .c_binding import VmbCameraInfo, VmbHandle, VmbUint32, G_VIMBA_C_HANDLE, VmbAccessMode, \
                        VimbaCError, VmbError, VmbFrameFlags, VmbFrame, VmbFrameCallback, \
                        VmbFeaturePersist, VmbFeaturePersistSettings
-from .feature import discover_features, discover_feature, FeatureTypes, FeaturesTuple
+from .feature import discover_features, discover_feature, FeatureTypes, FeaturesTuple, \
+                     FeatureTypeTypes
 from .shared import filter_features_by_name, filter_features_by_type, filter_affected_features, \
                     filter_selected_features, filter_features_by_category, read_memory_impl, \
                     write_memory_impl, read_registers_impl, write_registers_impl
 from .frame import Frame, FrameTuple, FormatTuple, PixelFormat
-from .util import Log, TraceEnable, RuntimeTypeCheckEnable
+from .util import Log, TraceEnable, RuntimeTypeCheckEnable, EnterContextOnCall, \
+                  LeaveContextOnCall, RaiseIfInsideContext, RaiseIfOutsideContext
 from .error import VimbaSystemError, VimbaCameraError, VimbaTimeout, VimbaFeatureError
 
 
@@ -70,20 +72,19 @@ FrameHandler = Callable[['Camera', Frame], None]
 
 
 class AccessMode(enum.IntEnum):
-    """Enum specifying all available access modes for camera access.
+    """Enum specifying all available camera access modes.
 
     Enum values:
-        None_  - No access
-        Full   - Read and write access
-        Read   - Read-only access
-        Config - Configuration access (GeV)
-        Lite   - Read and write access without feature access (only addresses)
+        None_  - No access.
+        Full   - Read and write access. Use this mode to configure the camera features and
+                 to acquire images (Camera Link cameras: configuration only).
+        Read   - Read-only access. Setting features is not possible.
+        Config - Configuration access to configure the IP address of your GigE camera.
     """
     None_ = VmbAccessMode.None_
     Full = VmbAccessMode.Full
     Read = VmbAccessMode.Read
     Config = VmbAccessMode.Config
-    Lite = VmbAccessMode.Lite
 
 
 class CameraEvent(enum.IntEnum):
@@ -102,10 +103,10 @@ class CameraEvent(enum.IntEnum):
 
 
 class PersistType(enum.IntEnum):
-    """Persistence Type used for camera configuration storing and loading.
+    """Persistence Type for camera configuration storing and loading.
     Enum values:
         All        - Save all features including lookup tables
-        Streamable - Save only Features tagged with Streamable
+        Streamable - Save only features tagged with Streamable
         NoLUT      - Save all features except lookup tables.
     """
     All = VmbFeaturePersist.All
@@ -211,7 +212,7 @@ class _StateQueued(_State):
             self.context.cam.get_feature_by_name('AcquisitionStart').run()
 
         except BaseException as e:
-            return cast(VimbaCameraError, e)
+            return VimbaCameraError(str(e))
 
         return _StateAcquiring(self.context)
 
@@ -235,7 +236,7 @@ class _StateAcquiring(_State):
             self.context.cam.get_feature_by_name('AcquisitionStop').run()
 
         except BaseException as e:
-            return cast(VimbaCameraError, e)
+            return VimbaCameraError(str(e))
 
         return _StateQueued(self.context)
 
@@ -249,7 +250,7 @@ class _StateAcquiring(_State):
                              self.context.timeout_ms)
 
             except VimbaCError as e:
-                raise _build_camera_error(self.context.cam, e)
+                raise _build_camera_error(self.context.cam, e) from e
 
     @TraceEnable()
     def queue_frame(self, frame):
@@ -260,7 +261,7 @@ class _StateAcquiring(_State):
                          self.context.frames_wrapper)
 
         except VimbaCError as e:
-            raise _build_camera_error(self.context.cam, e)
+            raise _build_camera_error(self.context.cam, e) from e
 
 
 class _CaptureFsm:
@@ -378,14 +379,15 @@ class FrameIter:
 
 
 class Camera:
-    """This class allows access a Camera detected by the Vimba System.
-    Camera is meant be used in conjunction with the "with" - Statement. On entering a context
-    all Camera features are detected and can be accessed within the context.
-    Basic Camera properties like Name and Model can be access outside of the context.
+    """This class allows access to a Camera detected by Vimba.
+    Camera is meant be used in conjunction with the "with" - statement.
+    On entering a context, all Camera features are detected and can be accessed within the context.
+    Static Camera properties like Name and Model can be accessed outside the context.
     """
     @TraceEnable()
+    @LeaveContextOnCall()
     def __init__(self, info: VmbCameraInfo):
-        """Do not call directly. Access Cameras via vimba.System instead."""
+        """Do not call directly. Access Cameras via vimba.Vimba instead."""
         self.__handle: VmbHandle = VmbHandle(0)
         self.__info: VmbCameraInfo = info
         self.__access_mode: AccessMode = AccessMode.Full
@@ -411,16 +413,17 @@ class Camera:
     def __str__(self):
         return 'Camera(id={})'.format(self.get_id())
 
+    @RaiseIfInsideContext()
     @RuntimeTypeCheckEnable()
     def set_access_mode(self, access_mode: AccessMode):
         """Set camera access mode.
 
         Arguments:
-            access_mode - AccessMode used on accessing a Camera. This method
-                          must be used before entering the Context with the 'with' statement.
+            access_mode - AccessMode for accessing a Camera.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called inside "with" - statement scope.
         """
         self.__access_mode = access_mode
 
@@ -429,30 +432,37 @@ class Camera:
         return self.__access_mode
 
     def get_id(self) -> str:
-        """Get Camera Id, e.g. DEV_1AB22C00041B"""
+        """Get Camera Id, for example, DEV_1AB22C00041B"""
         return decode_cstr(self.__info.cameraIdString)
 
     def get_name(self) -> str:
-        """Get Camera Name, e.g. Allied Vision 1800 U-500m"""
+        """Get Camera Name, for example, Allied Vision 1800 U-500m"""
         return decode_cstr(self.__info.cameraName)
 
     def get_model(self) -> str:
-        """Get Camera Model, e.g. 1800 U-500m"""
+        """Get Camera Model, for example, 1800 U-500m"""
         return decode_cstr(self.__info.modelName)
 
     def get_serial(self) -> str:
-        """Get Camera Serial, e.g. 000T7"""
+        """Get Camera serial number, for example, 50-0503328442"""
         return decode_cstr(self.__info.serialString)
 
     def get_permitted_access_modes(self) -> Tuple[AccessMode, ...]:
-        """Get a set of all access modes, the camera can be accessed with."""
-        return decode_flags(AccessMode, self.__info.permittedAccess)
+        """Get a set of all access modes the camera can be accessed with."""
+        val = self.__info.permittedAccess
+
+        # Clear VmbAccessMode.Lite Flag. It is offered by VimbaC, but it is not documented.
+        val &= ~int(VmbAccessMode.Lite)
+
+        return decode_flags(AccessMode, val)
 
     def get_interface_id(self) -> str:
-        """Get ID of the Interface this camera is connected to, e.g. VimbaUSBInterface_0x0"""
+        """Get ID of the Interface this camera is connected to, for example, VimbaUSBInterface_0x0
+        """
         return decode_cstr(self.__info.interfaceIdString)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def read_memory(self, addr: int, max_bytes: int) -> bytes:
         """Read a byte sequence from a given memory address.
@@ -466,16 +476,18 @@ class Camera:
 
         Raises:
             TypeError if parameters do not match their type hint.
-            ValueError if addr is negative
+            RuntimeError if called outside "with" - statement scope.
+            ValueError if addr is negative.
             ValueError if max_bytes is negative.
             ValueError if the memory access was invalid.
         """
         return read_memory_impl(self.__handle, addr, max_bytes)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def write_memory(self, addr: int, data: bytes):
-        """ Write a byte sequence to a given memory address.
+        """Write a byte sequence to a given memory address.
 
         Arguments:
             addr: Address to write the content of 'data' too.
@@ -483,159 +495,175 @@ class Camera:
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             ValueError if addr is negative.
         """
         return write_memory_impl(self.__handle, addr, data)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def read_registers(self, addrs: Tuple[int, ...]) -> Dict[int, int]:
         """Read contents of multiple registers.
 
         Arguments:
-            addrs: Sequence of addresses that should be read iteratively.
+            addrs: Sequence of addresses to be read iteratively.
 
-        Return:
+        Returns:
             Dictionary containing a mapping from given address to the read register values.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             ValueError if any address in addrs is negative.
             ValueError if the register access was invalid.
         """
         return read_registers_impl(self.__handle, addrs)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def write_registers(self, addrs_values: Dict[int, int]):
-        """Write data to multiple Registers.
+        """Write data to multiple registers.
 
         Arguments:
-            addrs_values: Mapping between Register addresses and the data to write.
+            addrs_values: Mapping between register addresses and the data to write.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             ValueError if any address in addrs_values is negative.
             ValueError if the register access was invalid.
         """
         return write_registers_impl(self.__handle, addrs_values)
 
+    @RaiseIfOutsideContext()
     def get_all_features(self) -> FeaturesTuple:
-        """Get access to all discovered features of this camera:
+        """Get access to all discovered features of this camera.
 
         Returns:
-            A set of all currently detected features. Returns an empty set then called
-            outside of 'with' - statement.
+            A set of all currently detected features.
+
+        Raises:
+            RuntimeError if called outside "with" - statement scope.
         """
         return self.__feats
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_features_affected_by(self, feat: FeatureTypes) -> FeaturesTuple:
         """Get all features affected by a specific camera feature.
 
         Arguments:
-            feat - Feature used find features that are affected by 'feat'.
+            feat - Feature used, find features that are affected by 'feat'.
 
         Returns:
-            A set of features affected by changes on 'feat'. Can be an empty set if 'feat'
-            does not affect any features.
+            A set of features affected by changes on 'feat'.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             VimbaFeatureError if 'feat' is not a feature of this camera.
         """
         return filter_affected_features(self.__feats, feat)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_features_selected_by(self, feat: FeatureTypes) -> FeaturesTuple:
         """Get all features selected by a specific camera feature.
 
         Arguments:
-            feat - Feature used find features that are selected by 'feat'.
+            feat - Feature to find features that are selected by 'feat'.
 
         Returns:
-            A set of features selected by changes on 'feat'. Can be an empty set if 'feat'
-            does not affect any features.
+            A feature set selected by changes on 'feat'.
 
         Raises:
             TypeError if 'feat' is not of any feature type.
+            RuntimeError if called outside "with" - statement scope.
             VimbaFeatureError if 'feat' is not a feature of this camera.
         """
         return filter_selected_features(self.__feats, feat)
 
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def get_features_by_type(self, feat_type: FeatureTypes) -> FeaturesTuple:
+    def get_features_by_type(self, feat_type: FeatureTypeTypes) -> FeaturesTuple:
         """Get all camera features of a specific feature type.
 
         Valid FeatureTypes are: IntFeature, FloatFeature, StringFeature, BoolFeature,
         EnumFeature, CommandFeature, RawFeature
 
         Arguments:
-            feat_type - FeatureType used find features of that type.
+            feat_type - FeatureType to find features of that type.
 
         Returns:
-            A set of features of type 'feat_type'. Can be an empty set if there is
-            no camera feature with the given type available.
+            A feature set of type 'feat_type'.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
         """
         return filter_features_by_type(self.__feats, feat_type)
 
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_features_by_category(self, category: str) -> FeaturesTuple:
         """Get all camera features of a specific category.
 
         Arguments:
-            category - Category that should be used for filtering.
+            category - Category for filtering features.
 
         Returns:
-            A set of features of category 'category'. Can be an empty set if there is
+            A feature set of category 'category'. Can be an empty set if there is
             no camera feature of that category.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
         """
         return filter_features_by_category(self.__feats, category)
 
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_feature_by_name(self, feat_name: str) -> FeatureTypes:
         """Get a camera feature by its name.
 
         Arguments:
-            feat_name - Name used to find a feature.
+            feat_name - Name to find a feature.
 
         Returns:
             Feature with the associated name.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             VimbaFeatureError if no feature is associated with 'feat_name'.
         """
         return filter_features_by_name(self.__feats, feat_name)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_frame_iter(self, limit: Optional[int] = None, timeout_ms: int = 2000) -> FrameIter:
-        """Construct frame iterator, providing synchronous camera access.
+        """Construct frame iterator, providing synchronous image acquisition.
 
         The Frame iterator acquires a new frame with each iteration.
 
         Arguments:
-            limit - The number of images the iterator should acquire. If limit is None
+            limit - The number of images the iterator shall acquire. If limit is None,
                     the iterator will produce an unlimited amount of images and must be
                     stopped by the user supplied code.
             timeout_ms - Timeout in milliseconds of frame acquisition.
 
         Returns:
-            frame_iter object
+            FrameIter object
 
         Raises:
+            RuntimeError if called outside "with" - statement scope.
             ValueError if a limit is supplied and negative.
             ValueError if a timeout_ms is negative.
-            VimbaCameraError if the camera is outside of its implemented context.
             VimbaTimeout if Frame acquisition timed out.
         """
         if limit and (limit < 0):
@@ -644,13 +672,10 @@ class Camera:
         if timeout_ms <= 0:
             raise ValueError('Given Timeout {} is not > 0'.format(timeout_ms))
 
-        if not self.__handle:
-            msg = 'Camera \'{}\' not ready for frame acquisition. Open camera via \'with\' .'
-            raise VimbaCameraError(msg)
-
         return FrameIter(self, limit, timeout_ms)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def get_frame(self, timeout_ms: int = 2000) -> Frame:
         """Get single frame from camera. Synchronous frame acquisition.
@@ -663,20 +688,22 @@ class Camera:
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             ValueError if a timeout_ms is negative.
-            VimbaCameraError if camera is outside of its context.
+            VimbaCameraError if camera is outside its context.
             VimbaTimeout if Frame acquisition timed out.
         """
         return self.get_frame_iter(1, timeout_ms).__iter__().__next__()
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def start_streaming(self, handler: FrameHandler, buffer_count: int = 5):
         """Enter streaming mode
 
-        Enter streaming mode also known as asynchronous frame acquisition.
-        While active the camera acquires and buffers frames continuously.
-        With each acquired frame a given FrameHandler is called with new Frame.
+        Enter streaming mode is also known as asynchronous frame acquisition.
+        While active, the camera acquires and buffers frames continuously.
+        With each acquired frame, a given FrameHandler is called with a new Frame.
 
         Arguments:
             handler - Callable that is executed on each acquired frame.
@@ -684,16 +711,16 @@ class Camera:
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             ValueError if buffer is less or equal to zero.
-            VimbaCameraError if the camera is already streaming
-            VimbaCameraError if the anything gone wrong on entering streaming mode.
+            VimbaCameraError if the camera is already streaming.
+            VimbaCameraError if anything went wrong on entering streaming mode.
         """
         if buffer_count <= 0:
             raise ValueError('Given buffer_count {} must be positive'.format(buffer_count))
 
         if self.is_streaming():
-            msg = 'Camera \'{}\' already streaming.'
-            raise VimbaCameraError(msg)
+            raise VimbaCameraError('Camera \'{}\' already streaming.'.format(self.get_id()))
 
         # Setup capturing fsm
         payload_size = self.get_feature_by_name('PayloadSize').get()
@@ -710,14 +737,16 @@ class Camera:
             raise exc
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     def stop_streaming(self):
         """Leave streaming mode.
 
-        Leave asynchronous frame acquisition. If streaming mode was not activated before
+        Leave asynchronous frame acquisition. If streaming mode was not activated before,
         it just returns silently.
 
         Raises:
-            VimbaCameraError if the anything gone wrong on leaving streaming mode.
+            RuntimeError if called outside "with" - statement scope.
+            VimbaCameraError if anything went wrong on leaving streaming mode.
         """
         if not self.is_streaming():
             return
@@ -733,35 +762,47 @@ class Camera:
 
     @TraceEnable()
     def is_streaming(self) -> bool:
-        """Returns True if the camera is currently in streaming mode, if not False is returned"""
+        """Returns True if the camera is currently in streaming mode. If not, returns False."""
         return self.__capture_fsm is not None
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
+    @RuntimeTypeCheckEnable()
     def queue_frame(self, frame: Frame):
-        """Reuse acquired Frame in streaming mode.
+        """Reuse acquired frame in streaming mode.
 
-        Add given frame back into the Frame queue used in streaming mode. This
+        Add given frame back into the frame queue used in streaming mode. This
         should be the last operation on a registered FrameHandler. If streaming mode is not
-        active it returns silently.
+        active, it returns silently.
 
         Arguments:
             frame - The frame to reuse.
 
         Raises:
+            TypeError if parameters do not match their type hint.
             ValueError if the given frame is not from the internal buffer queue.
-            VimbaCameraError if the anything gone wrong on reusing the frame.
+            RuntimeError if called outside "with" - statement scope.
+            VimbaCameraError if reusing the frame was unsuccessful.
         """
         if self.__capture_fsm is None:
             return
 
         if frame not in self.__capture_fsm.get_context().frames:
-            raise ValueError
+            raise ValueError('Given Frame is not from Queue')
 
         self.__capture_fsm.queue_frame(frame)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     def get_pixel_formats(self) -> FormatTuple:
-        """ Get supported pixel formats from Camera"""
+        """Get supported pixel formats from Camera.
+
+        Returns:
+            All pixel formats the camera supports
+
+        Raises:
+            RuntimeError if called outside "with" - statement scope.
+        """
         result = []
         feat = self.get_feature_by_name('PixelFormat')
 
@@ -779,8 +820,13 @@ class Camera:
         return tuple(result)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     def get_pixel_format(self):
-        """Get current pixel format."""
+        """Get current pixel format.
+
+        Raises:
+            RuntimeError if called outside "with" - statement scope.
+        """
         enum_value = str(self.get_feature_by_name('PixelFormat').get()).upper()
 
         for k in PixelFormat.__members__:
@@ -788,16 +834,18 @@ class Camera:
                 return PixelFormat[k]
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def set_pixel_format(self, fmt: PixelFormat):
-        """ Set current pixel format.
+        """Set current pixel format.
 
         Arguments:
             fmt - Default pixel format to set.
 
         Raises:
             TypeError if parameters do not match their type hint.
-            ValueError is given format in not in cameras supported PixelFormats.
+            RuntimeError if called outside "with" - statement scope.
+            ValueError if the given pixel format is not supported by the cameras.
         """
         if fmt not in self.get_pixel_formats():
             raise ValueError('Camera does not support PixelFormat \'{}\''.format(str(fmt)))
@@ -810,17 +858,19 @@ class Camera:
                 feat.set(entry)
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def save_settings(self, file: str, persist_type: PersistType):
         """Save camera settings to XML - File
 
         Arguments:
-            file - The location used to store the current settings. The given
+            file - The location for storing the current settings. The given
                    file must be a file ending with ".xml".
             persist_type - Parameter specifying which setting types to store.
 
         Raises:
             TypeError if parameters do not match their type hint.
+            RuntimeError if called outside "with" - statement scope.
             ValueError if argument path is no ".xml"- File.
          """
 
@@ -834,18 +884,20 @@ class Camera:
                      sizeof(settings))
 
     @TraceEnable()
+    @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
     def load_settings(self, file: str, persist_type: PersistType):
-        """Load camera settings from XML - File
+        """Load camera settings from XML file
 
         Arguments:
-            file - The location used to load current settings. The given
+            file - The location for loading current settings. The given
                    file must be a file ending with ".xml".
             persist_type - Parameter specifying which setting types to load.
 
         Raises:
             TypeError if parameters do not match their type hint.
-            ValueError if argument path is no ".xml"- File.
+            RuntimeError if called outside "with" - statement scope.
+            ValueError if argument path is no ".xml" file.
          """
 
         if not file.endswith('.xml'):
@@ -861,15 +913,13 @@ class Camera:
                      sizeof(settings))
 
     @TraceEnable()
+    @EnterContextOnCall()
     def _open(self):
-        exc = None
-
         try:
             call_vimba_c('VmbCameraOpen', self.__info.cameraIdString, self.__access_mode,
                          byref(self.__handle))
 
         except VimbaCError as e:
-            exc = cast(VimbaCameraError, e)
             err = e.get_error_code()
 
             # In theory InvalidAccess should be thrown on using a non permitted access mode.
@@ -878,30 +928,33 @@ class Camera:
                 msg = 'Accessed Camera \'{}\' with invalid Mode \'{}\'. Valid modes are: {}'
                 msg = msg.format(self.get_id(), str(self.__access_mode),
                                  self.get_permitted_access_modes())
-
                 exc = VimbaCameraError(msg)
 
-        if exc:
-            raise exc
+            else:
+                exc = VimbaCameraError(repr(err))
+
+            raise exc from e
 
         self.__feats = discover_features(self.__handle)
 
         # Determine current PacketSize (GigE - only) is somewhere between 1500 bytes
-        # add a log entry that
-        try:
-            min_ = 1400
-            max_ = 1600
-            size = filter_features_by_name(self.__feats, 'GVSPPacketSize').get()
+        feat = filter_features_by_name(self.__feats, 'GVSPPacketSize', False)
+        if feat:
+            try:
+                min_ = 1400
+                max_ = 1600
+                size = feat.get()
 
-            if (min_ < size) and (size < max_):
-                msg = ('Camera {}: GVSPPacketSize not optimized for streaming GigE Vision. '
-                       'Enable jumbo packets for improved performance.')
-                Log.get_instance().info(msg.format(self.get_id()))
+                if (min_ < size) and (size < max_):
+                    msg = ('Camera {}: GVSPPacketSize not optimized for streaming GigE Vision. '
+                           'Enable jumbo packets for improved performance.')
+                    Log.get_instance().info(msg.format(self.get_id()))
 
-        except VimbaFeatureError:
-            pass
+            except VimbaFeatureError:
+                pass
 
     @TraceEnable()
+    @LeaveContextOnCall()
     def _close(self):
         if self.is_streaming:
             self.stop_streaming()
@@ -982,7 +1035,12 @@ def discover_camera(id_: str) -> Camera:
 
     info = VmbCameraInfo()
 
-    call_vimba_c('VmbCameraInfoQuery', id_.encode('utf-8'), byref(info), sizeof(info))
+    # Try to lookup Camera with given ID. If this function
+    try:
+        call_vimba_c('VmbCameraInfoQuery', id_.encode('utf-8'), byref(info), sizeof(info))
+
+    except VimbaCError as e:
+        raise VimbaCameraError(str(e.get_error_code())) from e
 
     return Camera(info)
 
@@ -999,7 +1057,6 @@ def _frame_handle_accessor(frame: Frame) -> VmbFrame:
 
 
 def _build_camera_error(cam: Camera, orig_exc: VimbaCError) -> VimbaCameraError:
-    exc = cast(VimbaCameraError, orig_exc)
     err = orig_exc.get_error_code()
 
     if err == VmbError.ApiNotStarted:
@@ -1021,5 +1078,8 @@ def _build_camera_error(cam: Camera, orig_exc: VimbaCError) -> VimbaCameraError:
     elif err == VmbError.Timeout:
         msg = 'Frame capturing on Camera \'{}\' timed out.'
         exc = cast(VimbaCameraError, VimbaTimeout(msg.format(cam.get_id())))
+
+    else:
+        exc = VimbaCameraError(repr(err))
 
     return exc

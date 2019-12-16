@@ -122,9 +122,9 @@ class _Tracer:
 
 
 class TraceEnable:
-    """Decorator: Adds a entry of LogLevel.Trace on entry and exit of the wrapped function.
-    On Exit the Log entry contains information if the Function was left normally or with an
-    Exception.
+    """Decorator: Adds an entry of LogLevel. Trace on entry and exit of the wrapped function.
+    On exit, the log entry contains information if the function was left normally or with an
+    exception.
     """
     def __call__(self, func):
         @wraps(func)

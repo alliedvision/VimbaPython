@@ -52,6 +52,7 @@ __all__ = [
     'VmbImage',
     'VmbImageInfo',
     'VmbTransformInfo',
+    'VIMBA_IMAGE_TRANSFORM_VERSION',
     'EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION',
     'call_vimba_image_transform',
     'PIXEL_FORMAT_TO_LAYOUT',
@@ -316,6 +317,7 @@ class VmbTransformInfo(ctypes.Structure):
 
 
 # API
+VIMBA_IMAGE_TRANSFORM_VERSION = None
 if sys.platform == 'linux':
     EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION = '1.0'
 
@@ -353,16 +355,17 @@ def _attach_signatures(lib_handle: ctypes.CDLL) -> ctypes.CDLL:
 
 def _check_version(lib_handle: ctypes.CDLL) -> ctypes.CDLL:
     global EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION
+    global VIMBA_IMAGE_TRANSFORM_VERSION
 
     v = VmbUint32()
     lib_handle.VmbGetVersion(byref(v))
 
-    ver = '{}.{}'.format((v.value >> 24) & 0xff, (v.value >> 16) & 0xff)
-    expected_ver = EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION
+    VIMBA_IMAGE_TRANSFORM_VERSION = '{}.{}'.format((v.value >> 24) & 0xff, (v.value >> 16) & 0xff)
 
-    if (ver != expected_ver):
+    if (VIMBA_IMAGE_TRANSFORM_VERSION != EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION):
         msg = 'Invalid VimbaImageTransform Version: Expected: {}, Found:{}'
-        raise VimbaSystemError(msg.format(expected_ver, ver))
+        raise VimbaSystemError(msg.format(EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION,
+                                          VIMBA_IMAGE_TRANSFORM_VERSION))
 
     return lib_handle
 

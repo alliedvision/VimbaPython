@@ -31,10 +31,11 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 """
 
 import itertools
+
 from typing import Dict, Tuple
 from .c_binding import VmbUint32, VmbUint64, VmbHandle, VmbFeatureInfo
 from .c_binding import call_vimba_c, byref, sizeof, create_string_buffer, VimbaCError
-from .feature import FeaturesTuple, FeatureTypes
+from .feature import FeaturesTuple, FeatureTypes, FeatureTypeTypes
 from .error import VimbaFeatureError
 from .util import TraceEnable
 
@@ -137,12 +138,15 @@ def filter_selected_features(feats: FeaturesTuple, feat: FeatureTypes) -> Featur
 
 
 @TraceEnable()
-def filter_features_by_name(feats: FeaturesTuple, feat_name: str) -> FeatureTypes:
+def filter_features_by_name(feats: FeaturesTuple, feat_name: str, raises: bool = True):
     """Search for a feature with a specific name within a feature set.
 
     Arguments:
         feats: Feature set to search in.
         feat_name: Feature name to look for.
+        raises: If True, raises runtime error on failed lookup, if false returns empty set.
+                This is used to suppress creation of a log entry while VimbaFeatureError
+                construction.
 
     Returns:
         The Feature with the name 'feat_name'
@@ -152,14 +156,17 @@ def filter_features_by_name(feats: FeaturesTuple, feat_name: str) -> FeatureType
     """
     filtered = [feat for feat in feats if feat_name == feat.get_name()]
 
-    if not filtered:
+    if not filtered and raises:
         raise VimbaFeatureError('Feature \'{}\' not found.'.format(feat_name))
+
+    elif not filtered:
+        return ()
 
     return filtered.pop()
 
 
 @TraceEnable()
-def filter_features_by_type(feats: FeaturesTuple, feat_type: FeatureTypes) -> FeaturesTuple:
+def filter_features_by_type(feats: FeaturesTuple, feat_type: FeatureTypeTypes) -> FeaturesTuple:
     """Search for all features with a specific type within a given feature set.
 
     Arguments:
@@ -208,7 +215,6 @@ def read_memory_impl(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:
     _verify_addr(addr)
     _verify_size(max_bytes)
 
-    exc = None
     buf = create_string_buffer(max_bytes)
     bytesRead = VmbUint32()
 
@@ -217,10 +223,7 @@ def read_memory_impl(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:
 
     except VimbaCError as e:
         msg = 'Memory read access at {} failed with C-Error: {}.'
-        exc = ValueError(msg.format(hex(addr), repr(e.get_error_code())))
-
-    if exc:
-        raise exc
+        raise ValueError(msg.format(hex(addr), repr(e.get_error_code()))) from e
 
     return buf.value[:bytesRead.value]
 
@@ -240,7 +243,6 @@ def write_memory_impl(handle: VmbHandle, addr: int, data: bytes):
     """
     _verify_addr(addr)
 
-    exc = None
     bytesWrite = VmbUint32()
 
     try:
@@ -248,10 +250,7 @@ def write_memory_impl(handle: VmbHandle, addr: int, data: bytes):
 
     except VimbaCError as e:
         msg = 'Memory write access at {} failed with C-Error: {}.'
-        exc = ValueError(msg.format(hex(addr), repr(e.get_error_code())))
-
-    if exc:
-        raise exc
+        raise ValueError(msg.format(hex(addr), repr(e.get_error_code()))) from e
 
 
 @TraceEnable()
@@ -272,7 +271,6 @@ def read_registers_impl(handle: VmbHandle, addrs: Tuple[int, ...]) -> Dict[int, 
     for addr in addrs:
         _verify_addr(addr)
 
-    exc = None
     size = len(addrs)
     valid_reads = VmbUint32()
 
@@ -287,10 +285,7 @@ def read_registers_impl(handle: VmbHandle, addrs: Tuple[int, ...]) -> Dict[int, 
 
     except VimbaCError as e:
         msg = 'Register read access failed with C-Error: {}.'
-        exc = ValueError(msg.format(repr(e.get_error_code())))
-
-    if exc:
-        raise exc
+        raise ValueError(msg.format(repr(e.get_error_code()))) from e
 
     return dict(zip(c_addrs, c_values))
 
@@ -310,7 +305,6 @@ def write_registers_impl(handle: VmbHandle, addrs_values: Dict[int, int]):
     for addr in addrs_values:
         _verify_addr(addr)
 
-    exc = None
     size = len(addrs_values)
     valid_writes = VmbUint32()
 
@@ -326,10 +320,7 @@ def write_registers_impl(handle: VmbHandle, addrs_values: Dict[int, int]):
 
     except VimbaCError as e:
         msg = 'Register write access failed with C-Error: {}.'
-        exc = ValueError(msg.format(repr(e.get_error_code())))
-
-    if exc:
-        raise exc
+        raise ValueError(msg.format(repr(e.get_error_code()))) from e
 
 
 def _verify_addr(addr: int):

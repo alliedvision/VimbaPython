@@ -31,6 +31,7 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 """
 
 import unittest
+import pickle
 import copy
 import ctypes
 
@@ -38,60 +39,59 @@ from vimba import *
 from vimba.frame import *
 
 
-class RealCamTestsFrameTest(unittest.TestCase):
+class CamFrameTest(unittest.TestCase):
     def setUp(self):
         self.vimba = Vimba.get_instance()
         self.vimba._startup()
-        self.cam = self.vimba.get_camera_by_id(self.get_test_camera_id())
+
+        try:
+            self.cam = self.vimba.get_camera_by_id(self.get_test_camera_id())
+
+        except VimbaCameraError as e:
+            self.vimba._shutdown()
+            raise Exception('Failed to lookup Camera.') from e
 
     def tearDown(self):
         self.vimba._shutdown()
 
     def test_verify_buffer(self):
-        """Expectation: A Frame buffer shall have exactly the specified size on
-        construction.
-        """
+        # Expectation: A Frame buffer shall have exactly the specified size on construction.
+
         self.assertEqual(Frame(0).get_buffer_size(), 0)
         self.assertEqual(Frame(1024).get_buffer_size(), 1024)
         self.assertEqual(Frame(1024 * 1024).get_buffer_size(), 1024 * 1024)
 
     def test_verify_no_copy_buffer_access(self):
-        """Expectation: Accessing the internal buffer must not create a copy"""
+        # Expectation: Accessing the internal buffer must not create a copy
         frame = Frame(10)
         self.assertEqual(id(frame._buffer), id(frame.get_buffer()))
 
     def test_get_id(self):
-        """Expectation: get_id() must return None if Its locally constructed
-        else it must return the frame id.
-        """
-
+        # Expectation: get_id() must return None if Its locally constructed
+        # else it must return the frame id.
         self.assertIsNone(Frame(0).get_id())
 
         with self.cam:
             self.assertIsNotNone(self.cam.get_frame().get_id())
 
     def test_get_timestamp(self):
-        """Expectation: get_timestamp() must return None if Its locally constructed
-        else it must return the timestamp.
-        """
-
+        # Expectation: get_timestamp() must return None if Its locally constructed
+        # else it must return the timestamp.
         self.assertIsNone(Frame(0).get_timestamp())
 
         with self.cam:
             self.assertIsNotNone(self.cam.get_frame().get_timestamp())
 
     def test_get_offset(self):
-        """Expectation: get_offset_x() must return None if Its locally constructed
-        else it must return the offset as int. Same goes for get_offset_y()
-        """
+        # Expectation: get_offset_x() must return None if Its locally constructed
+        # else it must return the offset as int. Same goes for get_offset_y()
 
         self.assertIsNone(Frame(0).get_offset_x())
         self.assertIsNone(Frame(0).get_offset_y())
 
     def test_get_dimension(self):
-        """Expectation: get_width() must return None if Its locally constructed
-        else it must return the offset as int. Same goes for get_height()
-        """
+        # Expectation: get_width() must return None if Its locally constructed
+        # else it must return the offset as int. Same goes for get_height()
 
         self.assertIsNone(Frame(0).get_width())
         self.assertIsNone(Frame(0).get_height())
@@ -102,9 +102,8 @@ class RealCamTestsFrameTest(unittest.TestCase):
             self.assertIsNotNone(frame.get_height())
 
     def test_get_image_size(self):
-        """Expectation: get_image_size() must return 0 if locally constructed
-        else it must return the image_size as int.
-        """
+        # Expectation: get_image_size() must return 0 if locally constructed
+        # else it must return the image_size as int.
 
         self.assertEquals(Frame(0).get_image_size(), 0)
 
@@ -112,9 +111,9 @@ class RealCamTestsFrameTest(unittest.TestCase):
             self.assertNotEquals(self.cam.get_frame().get_image_size(), 0)
 
     def test_deepcopy(self):
-        """Expectation: a deepcopy must clone the frame buffer with its contents an
-        update the internally store pointer in VmbFrame struct.
-        """
+        # Expectation: a deepcopy must clone the frame buffer with its contents an
+        # update the internally store pointer in VmbFrame struct.
+
         with self.cam:
             frame = self.cam.get_frame()
 
@@ -139,12 +138,12 @@ class RealCamTestsFrameTest(unittest.TestCase):
         self.assertEquals(frame._frame.bufferSize, frame_cpy._frame.bufferSize)
 
     def test_get_pixel_format(self):
-        """Expectation: Frames have an image format set after acquisition"""
+        # Expectation: Frames have an image format set after acquisition
         with self.cam:
             self.assertNotEquals(self.cam.get_frame().get_pixel_format(), 0)
 
     def test_incompatible_formats_value_error(self):
-        """Expectation: Conversion into incompatible formats must lead to an value error """
+        # Expectation: Conversion into incompatible formats must lead to an value error
         with self.cam:
             frame = self.cam.get_frame()
 
@@ -156,10 +155,10 @@ class RealCamTestsFrameTest(unittest.TestCase):
                 self.assertRaises(ValueError, frame.convert_pixel_format, fmt)
 
     def test_convert_to_all_given_formats(self):
-        """Expectation: A Series of Frame, each acquired with a different Pixel format
-        Must be convertible to all formats the given format claims its convertible to without any
-        errors.
-        """
+        # Expectation: A Series of Frame, each acquired with a different Pixel format
+        # Must be convertible to all formats the given format claims its convertible to without any
+        # errors.
+
         test_frames = []
 
         with self.cam:
@@ -167,6 +166,7 @@ class RealCamTestsFrameTest(unittest.TestCase):
                 self.cam.set_pixel_format(fmt)
 
                 frame = self.cam.get_frame()
+
                 self.assertEqual(fmt, frame.get_pixel_format())
                 test_frames.append(frame)
 
@@ -178,3 +178,5 @@ class RealCamTestsFrameTest(unittest.TestCase):
                 cpy_frame.convert_pixel_format(expected_fmt)
 
                 self.assertEquals(expected_fmt, cpy_frame.get_pixel_format())
+
+

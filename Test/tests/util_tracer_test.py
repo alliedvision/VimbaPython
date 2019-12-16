@@ -50,8 +50,7 @@ class TracerTest(unittest.TestCase):
         self.log._test_buffer = None
 
     def test_trace_inactive(self):
-        """Expectation: A disabled log must not contain any trace entries.
-        """
+        # Expectation: A disabled log must not contain any trace entries.
 
         @TraceEnable()
         def test_func(arg):
@@ -69,9 +68,8 @@ class TracerTest(unittest.TestCase):
         self.assertFalse(self.log._test_buffer)
 
     def test_trace_normal_exit(self):
-        """Expectation: Must not throw on call normal func.
-        Each call traced call must add two Log entries:
-        """
+        # Expectation: Must not throw on call normal func.
+        # Each call traced call must add two Log entries:
 
         @TraceEnable()
         def test_func(arg):
@@ -87,9 +85,8 @@ class TracerTest(unittest.TestCase):
         self.assertEqual(len(self.log._test_buffer), 6)
 
     def test_trace_raised_exit(self):
-        """Expectation: Throws internally thrown exception and adds two log entries
-        Each call traced call must add two Log entries:
-        """
+        # Expectation: Throws internally thrown exception and adds two log entries
+        # Each call traced call must add two Log entries:
 
         @TraceEnable()
         def test_func(arg):
@@ -105,7 +102,7 @@ class TracerTest(unittest.TestCase):
         self.assertEqual(len(self.log._test_buffer), 6)
 
     def test_trace_function(self):
-        """Expectation: Normal functions must be traceable """
+        # Expectation: Normal functions must be traceable
         @TraceEnable()
         def test_func():
             pass
@@ -120,7 +117,7 @@ class TracerTest(unittest.TestCase):
         self.assertEqual(len(self.log._test_buffer), 6)
 
     def test_trace_lambda(self):
-        """Expectation: Lambdas must be traceable """
+        # Expectation: Lambdas must be traceable
 
         test_lambda = TraceEnable()(lambda: 0)
 
@@ -134,7 +131,7 @@ class TracerTest(unittest.TestCase):
         self.assertEqual(len(self.log._test_buffer), 6)
 
     def test_trace_object(self):
-        """Expectation: Objects must be traceable including constructors."""
+        # Expectation: Objects must be traceable including constructors.
         class TestObj:
             @TraceEnable()
             def __init__(self, arg):

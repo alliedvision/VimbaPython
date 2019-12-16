@@ -31,74 +31,101 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 """
 
 import unittest
-
 from vimba import *
 
 
 class VimbaTest(unittest.TestCase):
     def setUp(self):
-        pass
+        self.vimba = Vimba.get_instance()
 
     def tearDown(self):
         pass
 
     def test_singleton(self):
-        """Expected behavior: Multiple calls to Vimba.get_instance() return the same object."""
-        self.assertEqual(Vimba.get_instance(), Vimba.get_instance())
+        # Expected behavior: Multiple calls to Vimba.get_instance() return the same object.
+        self.assertEqual(self.vimba, Vimba.get_instance())
+
+    def test_get_version(self):
+        # Expectation: Returned Version is not empty and does not raise any exceptions.
+        self.assertNotEqual(self.vimba.get_version(), "")
 
     def test_get_camera_by_id_failure(self):
-        """Expected behavior: Lookup of a currently unavailable camera must throw an
-        VimbaCameraError regardless of context.
-        """
-        vimba = Vimba.get_instance()
-
-        self.assertRaises(VimbaCameraError, vimba.get_camera_by_id, 'Invalid ID')
-
-        with vimba:
-            self.assertRaises(VimbaCameraError, vimba.get_camera_by_id, 'Invalid ID')
-
-        self.assertRaises(VimbaCameraError, vimba.get_camera_by_id, 'Invalid ID')
+        # Expected behavior: Lookup of a currently unavailable camera must throw an
+        # VimbaCameraError
+        with self.vimba:
+            self.assertRaises(VimbaCameraError, self.vimba.get_camera_by_id, 'Invalid ID')
 
     def test_get_interface_by_id_failure(self):
-        """Expected behavior: Lookup of a currently unavailable interface must throw an
-        VimbaInterfaceError regardless of context.
-        """
-        vimba = Vimba.get_instance()
-
-        self.assertRaises(VimbaInterfaceError, vimba.get_interface_by_id, 'Invalid ID')
-
-        with vimba:
-            self.assertRaises(VimbaInterfaceError, vimba.get_interface_by_id, 'Invalid ID')
-
-        self.assertRaises(VimbaInterfaceError, vimba.get_interface_by_id, 'Invalid ID')
+        # Expected behavior: Lookup of a currently unavailable interface must throw an
+        # VimbaInterfaceError
+        with self.vimba:
+            self.assertRaises(VimbaInterfaceError, self.vimba.get_interface_by_id, 'Invalid ID')
 
     def test_get_feature_by_name_failure(self):
-        """Expected behavior: Lookup of a currently unavailable feature must throw an
-        VimbaFeatureError regardless of context.
-        """
-        vimba = Vimba.get_instance()
-
-        self.assertRaises(VimbaFeatureError, vimba.get_feature_by_name, 'Invalid ID')
-
-        with vimba:
-            self.assertRaises(VimbaFeatureError, vimba.get_feature_by_name, 'Invalid ID')
-
-        self.assertRaises(VimbaFeatureError, vimba.get_feature_by_name, 'Invalid ID')
+        # Expected behavior: Lookup of a currently unavailable feature must throw an
+        # VimbaFeatureError
+        with self.vimba:
+            self.assertRaises(VimbaFeatureError, self.vimba.get_feature_by_name, 'Invalid ID')
 
     def test_runtime_check_failure(self):
-        """All functions with RuntimeTypeCheckEnable must return a TypeError on Failure"""
-        vimba = Vimba.get_instance()
+        self.assertRaises(TypeError, self.vimba.set_network_discovery, 0.0)
 
-        self.assertRaises(TypeError, vimba.set_network_discovery, 0.0)
-        self.assertRaises(TypeError, vimba.get_camera_by_id, 0)
-        self.assertRaises(TypeError, vimba.get_interface_by_id, 1)
-        self.assertRaises(TypeError, vimba.get_feature_by_name, 0)
-        self.assertRaises(TypeError, vimba.enable_log, '-1')
+        with self.vimba:
+            # All functions with RuntimeTypeCheckEnable must return a TypeError on Failure
+            self.assertRaises(TypeError, self.vimba.get_camera_by_id, 0)
+            self.assertRaises(TypeError, self.vimba.get_interface_by_id, 1)
+            self.assertRaises(TypeError, self.vimba.get_feature_by_name, 0)
+            self.assertRaises(TypeError, self.vimba.enable_log, '-1')
 
-        self.assertRaises(TypeError, vimba.get_features_affected_by, '-1')
-        self.assertRaises(TypeError, vimba.get_features_selected_by, '-1')
-        self.assertRaises(TypeError, vimba.get_features_by_type, [])
-        self.assertRaises(TypeError, vimba.register_camera_change_handler, 0)
-        self.assertRaises(TypeError, vimba.unregister_camera_change_handler, 0)
-        self.assertRaises(TypeError, vimba.register_interface_change_handler, 0)
-        self.assertRaises(TypeError, vimba.unregister_interface_change_handler, 0)
+            self.assertRaises(TypeError, self.vimba.get_features_affected_by, '-1')
+            self.assertRaises(TypeError, self.vimba.get_features_selected_by, '-1')
+            self.assertRaises(TypeError, self.vimba.get_features_by_type, [])
+            self.assertRaises(TypeError, self.vimba.register_camera_change_handler, 0)
+            self.assertRaises(TypeError, self.vimba.unregister_camera_change_handler, 0)
+            self.assertRaises(TypeError, self.vimba.register_interface_change_handler, 0)
+            self.assertRaises(TypeError, self.vimba.unregister_interface_change_handler, 0)
+
+    def test_vimba_context_manager_reentrancy(self):
+        # Expectation: Implemented Context Manager must be reentrant, not causing
+        # multiple starts of the Vimba API (would cause C-Errors)
+
+        with self.vimba:
+            with self.vimba:
+                with self.vimba:
+                    pass
+
+    def test_vimba_api_context_sensitity_outside_context(self):
+        # Expectation: Vimba has functions that shall only be callable outside the Context and
+        # calling within the context must cause a runtime error.
+
+        self.assertNoRaise(self.vimba.set_network_discovery, True)
+
+        with self.vimba:
+            self.assertRaises(RuntimeError, self.vimba.set_network_discovery, True)
+
+        self.assertNoRaise(self.vimba.set_network_discovery, True)
+
+    def test_vimba_api_context_sensitity_inside_context(self):
+        # Expectation: Vimba has functions that shall only be callable inside the Context and
+        # calling outside must cause a runtime error. This test check only if the RuntimeErrors
+        # are triggered then called Outside of the with block.
+        self.assertRaises(RuntimeError, self.vimba.read_memory, 0, 0)
+        self.assertRaises(RuntimeError, self.vimba.write_memory, 0, b'foo')
+        self.assertRaises(RuntimeError, self.vimba.read_registers, ())
+        self.assertRaises(RuntimeError, self.vimba.write_registers, {0: 0})
+        self.assertRaises(RuntimeError, self.vimba.get_all_interfaces)
+        self.assertRaises(RuntimeError, self.vimba.get_interface_by_id, 'id')
+        self.assertRaises(RuntimeError, self.vimba.get_all_cameras)
+        self.assertRaises(RuntimeError, self.vimba.get_camera_by_id, 'id')
+        self.assertRaises(RuntimeError, self.vimba.get_all_features)
+
+        # Enter scope to get handle on Features as valid parameters for the test:
+        # Don't to this in production code because the feature will be invalid if use.
+        with self.vimba:
+            feat = self.vimba.get_all_features()[0]
+
+        self.assertRaises(RuntimeError, self.vimba.get_features_affected_by, feat)
+        self.assertRaises(RuntimeError, self.vimba.get_features_selected_by, feat)
+        self.assertRaises(RuntimeError, self.vimba.get_features_by_type, IntFeature)
+        self.assertRaises(RuntimeError, self.vimba.get_features_by_category, 'foo')
+        self.assertRaises(RuntimeError, self.vimba.get_feature_by_name, 'foo')

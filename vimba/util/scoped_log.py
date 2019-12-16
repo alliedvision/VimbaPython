@@ -61,9 +61,12 @@ class _ScopedLog:
 
 
 class ScopedLogEnable:
-    """Decorator: Enables Logging facility before execution of the wrapped function
+    """Decorator: Enables logging facility before execution of the wrapped function
     and disables logging after exiting the wrapped function. This allows more specific
-    Logging of a code section compared to enabling/disabling the global logging mechanism.
+    logging of a code section compared to enabling or disabling the global logging mechanism.
+
+    Arguments:
+        config: The configuration the log should be enabled with.
     """
     def __init__(self, config: LogConfig):
         """Add scoped logging to a Callable.

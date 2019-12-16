@@ -30,65 +30,60 @@ A PRIMARY PURPOSE OF THIS EARLY ACCESS IS TO OBTAIN FEEDBACK ON PERFORMANCE AND
 THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 """
 
-from .util import Log
+import unittest
 
-__all__ = [
-    'VimbaSystemError',
-    'VimbaCameraError',
-    'VimbaInterfaceError',
-    'VimbaFeatureError',
-    'VimbaTimeout'
-]
+from vimba.util import *
 
 
-class _LoggedError(Exception):
-    def __init__(self, msg: str):
-        super().__init__(msg)
-        Log.get_instance().error(msg)
+class TestObj:
+    @LeaveContextOnCall()
+    def __init__(self):
+        pass
+
+    @EnterContextOnCall()
+    def __enter__(self):
+        pass
+
+    @LeaveContextOnCall()
+    def __exit__(self, _1, _2, _3):
+        pass
+
+    @RaiseIfOutsideContext()
+    def works_inside_context(self):
+        pass
+
+    @RaiseIfInsideContext()
+    def works_outside_context(self):
+        pass
 
 
-class VimbaSystemError(_LoggedError):
-    """Errors related to the underlying Vimba System
+class ContextDecoratorTest(unittest.TestCase):
+    def setUp(self):
+        self.test_obj = TestObj()
 
-    Error type to indicate system-wide errors like:
-    - Incomplete Vimba installation
-    - Incompatible version of the underlying C-Layer
-    - An unsupported OS
-    """
-    pass
+    def tearDown(self):
+        pass
 
+    def test_raise_if_inside_context(self):
+        # Expectation: a decorated method must raise a RuntimeError if a
+        # Decorated function is called within a with - statement and
+        # run properly outside of the context.
 
-class VimbaCameraError(_LoggedError):
-    """Errors related to cameras
+        self.assertNoRaise(self.test_obj.works_outside_context)
 
-    Error Type to indicated camera-related errors like:
-    - Access of a disconnected Camera object
-    - Lookup of non-existing cameras
-    """
-    pass
+        with self.test_obj:
+            self.assertRaises(RuntimeError, self.test_obj.works_outside_context)
 
+        self.assertNoRaise(self.test_obj.works_outside_context)
 
-class VimbaInterfaceError(_LoggedError):
-    """Errors related to Interfaces
+    def test_raise_if_outside_context(self):
+        # Expectation: a decorated method must raise a RuntimeError if a
+        # Decorated function is called outside a with - statement and
+        # run properly inside of the context.
 
-    Error Type to indicated interface-related errors like:
-    - Access on a disconnected Interface object
-    - Lookup of a non-existing Interface
-    """
-    pass
+        self.assertRaises(RuntimeError, self.test_obj.works_inside_context)
 
+        with self.test_obj:
+            self.assertNoRaise(self.test_obj.works_inside_context)
 
-class VimbaFeatureError(_LoggedError):
-    """Error related to Feature access.
-
-    Error type to indicate invalid Feature access like:
-    - Invalid access mode on Feature access.
-    - Out of range values upon setting a value.
-    - Failed lookup of features.
-    """
-    pass
-
-
-class VimbaTimeout(_LoggedError):
-    """Indicates that an operation timed out."""
-    pass
+        self.assertRaises(RuntimeError, self.test_obj.works_inside_context)

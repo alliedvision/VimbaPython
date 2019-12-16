@@ -31,7 +31,7 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 """
 
 import unittest
-from typing import Union, Optional, Tuple, Callable, Dict
+from typing import Union, Optional, Tuple, Callable, Dict, Type
 from vimba.util import *
 
 
@@ -43,9 +43,8 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         pass
 
     def test_func_mixed_args_kwargs_and_defaults(self):
-        """Expectation: The typecheck must be able to deal with a valid mixture of args, kwargs
-        and default values.
-        """
+        # Expectation: The typecheck must be able to deal with a valid mixture of args, kwargs
+        # and default values.
 
         @RuntimeTypeCheckEnable()
         def test_func(a: int, b: str, c: float = 11.0 / 7.0):
@@ -61,9 +60,9 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, test_func, c='invalid type', b='str', a=0.0)
 
     def test_func_no_hints(self):
-        """ Expectation: Functions without type hints
-            should not throw any type errors
-        """
+        # Expectation: Functions without type hints
+        # should not throw any type errors
+
         @RuntimeTypeCheckEnable()
         def test_func(arg1, arg2):
             return str()
@@ -71,9 +70,9 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertNoRaise(test_func, 'str', 0)
 
     def test_func_some_hints(self):
-        """ Expectation: Type checks are only enforced on Arguments with hint.
-            Argument without hints should be accepted
-        """
+        # Expectation: Type checks are only enforced on Arguments with hint.
+        # Argument without hints should be accepted
+
         @RuntimeTypeCheckEnable()
         def test_func(arg1, arg2: int):
             return str()
@@ -83,9 +82,9 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, test_func, 'str', 0.0)
 
     def test_object(self):
-        """ Expectation: The runtime checker must work on Objects just as on
-            functions.
-        """
+        # Expectation: The runtime checker must work on Objects just as on
+        #    functions.
+
         class TestObject:
             @RuntimeTypeCheckEnable()
             def __init__(self, arg1: str, arg2: int):
@@ -103,8 +102,18 @@ class RuntimeTypeCheckTest(unittest.TestCase):
 
         self.assertRaises(TypeError, obj, 0.0)
 
+    def test_type(self):
+        # Expectation: types as parameters must be detected like any other values.
+        @RuntimeTypeCheckEnable()
+        def func(arg: Type[int]):
+            pass
+
+        self.assertNoRaise(func, int)
+        self.assertRaises(TypeError, func, str)
+        self.assertRaises(TypeError, func, 0)
+
     def test_union(self):
-        """ Expectation: int and string are valid parameters. Everything else must throw """
+        # Expectation: int and string are valid parameters. Everything else must throw
         @RuntimeTypeCheckEnable()
         def func(arg: Union[int, str]) -> Union[int, str]:
             return arg
@@ -114,9 +123,8 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, 0.0)
 
     def test_optional(self):
-        """ Expectation: For optionals the check must accept the given type or None.
-            Anything else must lead to an TypeError
-        """
+        # Expectation: For optionals the check must accept the given type or None.
+        # Anything else must lead to an TypeError
 
         @RuntimeTypeCheckEnable()
         def func(arg: Optional[int]) -> Optional[str]:
@@ -127,9 +135,9 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, 'str')
 
     def test_tuple(self):
-        """ Expectation: Fixed size tuples checking must verify that size and type order is
-            enforced.
-        """
+        # Expectation: Fixed size tuples checking must verify that size and type order is
+        # enforced.
+
         @RuntimeTypeCheckEnable()
         def func(arg: Tuple[int, str, float]) -> Tuple[float, int, str]:
             i, s, f = arg
@@ -142,8 +150,8 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, ('str1', 'str', 0.0))
 
     def test_tuple_var_length(self):
-        """ Expectation: Var length tuples checking must verify that contained type is enforced.
-        """
+        # Expectation: Var length tuples checking must verify that contained type is enforced.
+
         @RuntimeTypeCheckEnable()
         def func(arg: Tuple[int, ...]) -> Tuple[str, ...]:
             return tuple([str(i) for i in arg])
@@ -155,7 +163,7 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, (1, 'str'))
 
     def test_tuple_empty(self):
-        """ Empty Tuples must satisfy the requirements to Tuple types as argument and results """
+        # Empty Tuples must satisfy the requirements to Tuple types as argument and results
         @RuntimeTypeCheckEnable()
         def func(arg: Tuple[int, ...]) -> Tuple[int, ...]:
             return ()
@@ -164,7 +172,7 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertEqual(func(()), ())
 
     def test_tuple_union(self):
-        """ Tuples of union types must be detected correctly """
+        # Tuples of union types must be detected correctly
         @RuntimeTypeCheckEnable()
         def func(arg: Tuple[Union[int, str], ...]):
             return arg
@@ -178,7 +186,7 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, (2, 0.0))
 
     def test_dict(self):
-        """ Expectation: Dictionaries must be detected correctly."""
+        # Expectation: Dictionaries must be detected correctly.
         @RuntimeTypeCheckEnable()
         def func(arg: Dict[int, str]):
             pass
@@ -191,7 +199,7 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, {0: b'bytes'})
 
     def test_callable_no_func(self):
-        """Expectation: The Callable verification shall fail if given Parameter is no callable."""
+        # Expectation: The Callable verification shall fail if given Parameter is no callable.
         @RuntimeTypeCheckEnable()
         def func(fn: Callable[[], None]):
             fn()
@@ -199,9 +207,9 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, 'no_callable')
 
     def test_callable_func(self):
-        """Expectation: A Callable without any hints must comply as long as the number of parameters
-        matches to given hints. The Return Type doesn't matter if not given.
-        """
+        # Expectation: A Callable without any hints must comply as long as the number of parameters
+        # matches to given hints. The Return Type doesn't matter if not given.
+
         @RuntimeTypeCheckEnable()
         def func(fn: Callable[[str, float], int], arg1: str, arg2: float) -> int:
             return fn(arg1, arg2)
@@ -220,7 +228,7 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, err2, 'str', 0.0)
 
     def test_callable_obj(self):
-        """Expectation: A Object that is callable must pass the runtime check"""
+        # Expectation: A Object that is callable must pass the runtime check
         @RuntimeTypeCheckEnable()
         def func(fn: Callable[[str], None], arg: str) -> str:
             return fn(arg)
@@ -242,7 +250,7 @@ class RuntimeTypeCheckTest(unittest.TestCase):
         self.assertRaises(TypeError, func, Err2(), 'str')
 
     def test_callable_lambda(self):
-        """Expectation: RuntimeTypeCheck must behave with lambas as with functions"""
+        # Expectation: RuntimeTypeCheck must behave with lambas as with functions
 
         @RuntimeTypeCheckEnable()
         def func(fn: Callable[[str, float], int], arg1: str, arg2: float) -> int:

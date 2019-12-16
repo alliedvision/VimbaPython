@@ -56,7 +56,11 @@ __all__ = [
     # Decorators
     'TraceEnable',
     'ScopedLogEnable',
-    'RuntimeTypeCheckEnable'
+    'RuntimeTypeCheckEnable',
+    'EnterContextOnCall',
+    'LeaveContextOnCall',
+    'RaiseIfInsideContext',
+    'RaiseIfOutsideContext'
 ]
 
 from .log import Log, LogLevel, LogConfig, LOG_CONFIG_TRACE_CONSOLE_ONLY, \
@@ -69,3 +73,5 @@ from .log import Log, LogLevel, LogConfig, LOG_CONFIG_TRACE_CONSOLE_ONLY, \
 from .tracer import TraceEnable
 from .scoped_log import ScopedLogEnable
 from .runtime_type_check import RuntimeTypeCheckEnable
+from .context_decorator import EnterContextOnCall, LeaveContextOnCall, RaiseIfInsideContext, \
+                               RaiseIfOutsideContext

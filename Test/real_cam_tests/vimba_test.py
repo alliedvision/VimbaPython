@@ -31,11 +31,13 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 """
 
 import unittest
+import ipaddress
+import struct
 
 from vimba import *
 
 
-class RealCamTestsVimbaTest(unittest.TestCase):
+class CamVimbaTest(unittest.TestCase):
     def setUp(self):
         self.vimba = Vimba.get_instance()
 
@@ -43,38 +45,34 @@ class RealCamTestsVimbaTest(unittest.TestCase):
         pass
 
     def test_context_entry_exit(self):
-        """ Expected Behavior:
-        Before context entry Vimba shall have no detected features, no detected cameras and
-        no detected Interfaces. On entering the context features, cameras and interfaces shall
-        be detected and after leaving the context, everything should be reverted.
-        """
-        self.assertEqual(self.vimba.get_all_features(), ())
-        self.assertEqual(self.vimba.get_all_interfaces(), ())
-        self.assertEqual(self.vimba.get_all_cameras(), ())
+        # Expected Behavior:
+        # On entering the context features, cameras and interfaces shall
+        # be detected and after leaving the context, everything should be reverted.
+
+        self.assertRaises(RuntimeError, self.vimba.get_all_features)
+        self.assertRaises(RuntimeError, self.vimba.get_all_interfaces)
+        self.assertRaises(RuntimeError, self.vimba.get_all_cameras)
 
         with self.vimba:
             self.assertNotEqual(self.vimba.get_all_features(), ())
             self.assertNotEqual(self.vimba.get_all_interfaces(), ())
             self.assertNotEqual(self.vimba.get_all_cameras(), ())
 
-        self.assertEqual(self.vimba.get_all_features(), ())
-        self.assertEqual(self.vimba.get_all_interfaces(), ())
-        self.assertEqual(self.vimba.get_all_cameras(), ())
+        self.assertRaises(RuntimeError, self.vimba.get_all_features)
+        self.assertRaises(RuntimeError, self.vimba.get_all_interfaces)
+        self.assertRaises(RuntimeError, self.vimba.get_all_cameras)
 
     def test_get_all_interfaces(self):
-        """Expected Behavior: get_all_interfaces() must be empty in closed state and
-           non-empty then opened.
-        """
-        self.assertFalse(self.vimba.get_all_interfaces())
+        # Expected Behavior: get_all_interfaces() must raise an RuntimeError in closed state and
+        # be non-empty then opened.
+        self.assertRaises(RuntimeError, self.vimba.get_all_interfaces)
 
         with self.vimba:
             self.assertTrue(self.vimba.get_all_interfaces())
 
     def test_get_interface_by_id(self):
-        """Expected Behavior: All detected Interfaces must be lookup able by their Id.
-        If outside of given scope, an error must be returned
-        """
-
+        # Expected Behavior: All detected Interfaces must be lookup able by their Id.
+        # If outside of given scope, an error must be returned
         with self.vimba:
             ids = [inter.get_id() for inter in self.vimba.get_all_interfaces()]
 
@@ -82,22 +80,75 @@ class RealCamTestsVimbaTest(unittest.TestCase):
                 self.assertNoRaise(self.vimba.get_interface_by_id, id_)
 
         for id_ in ids:
-            self.assertRaises(VimbaInterfaceError, self.vimba.get_interface_by_id, id_)
+            self.assertRaises(RuntimeError, self.vimba.get_interface_by_id, id_)
 
     def test_get_all_cameras(self):
-        """Expected Behavior: get_all_cameras() must only return camera handles on a open camera.
-        """
-        self.assertFalse(self.vimba.get_all_cameras())
+        # Expected Behavior: get_all_cameras() must only return camera handles on a open camera.
+        self.assertRaises(RuntimeError, self.vimba.get_all_cameras)
 
         with self.vimba:
             self.assertTrue(self.vimba.get_all_cameras())
 
     def test_get_camera_by_id(self):
-        """Expected Behavior: Lookup of test camera must not fail after system opening """
+        # Expected Behavior: Lookup of test camera must not fail after system opening
         camera_id = self.get_test_camera_id()
-        self.assertRaises(VimbaCameraError, self.vimba.get_camera_by_id, camera_id)
 
         with self.vimba:
             self.assertNoRaise(self.vimba.get_camera_by_id, camera_id)
 
-        self.assertRaises(VimbaCameraError, self.vimba.get_camera_by_id, camera_id)
+    def test_get_camera_by_ip(self):
+        # Expected Behavior: get_camera_by_id() must work with a valid ipv4 address.
+        # A with lookup of an invalid ipv4 address (no Camera attached)
+        # must raise a VimbaCameraError, a lookup with an ipv6 address must raise a
+        # VimbaCameraError in general (VimbaC doesn't support ipv6)
+        with self.vimba:
+            # Verify that the Test Camera is a GigE - Camera
+            cam = self.vimba.get_camera_by_id(self.get_test_camera_id())
+            inter = self.vimba.get_interface_by_id(cam.get_interface_id())
+
+            if inter.get_type() != InterfaceType.Ethernet:
+                raise self.skipTest('Test requires GigE - Camera.')
+
+            # Lookup test cameras IP address.
+            with cam:
+                ip_as_number = cam.get_feature_by_name('GevCurrentIPAddress').get()
+
+            # Swap byte order, the raw value does not seem to follow network byte order.
+            ip_as_number = struct.pack('<L', ip_as_number)
+
+            # Verify that lookup with IPv4 Address returns the same Camera Object
+            ip_addr = str(ipaddress.IPv4Address(ip_as_number))
+            self.assertEqual(self.vimba.get_camera_by_id(ip_addr), cam)
+
+            # Verify that a lookup with an invalid IPv4 Address raises a VimbaCameraError
+            ip_addr = str(ipaddress.IPv4Address('127.0.0.1'))
+            self.assertRaises(VimbaCameraError, self.vimba.get_camera_by_id, ip_addr)
+
+            # Verify that a lookup with an IPv6 Address raises a VimbaCameraError
+            ip_addr = str(ipaddress.IPv6Address('FD00::DEAD:BEEF'))
+            self.assertRaises(VimbaCameraError, self.vimba.get_camera_by_id, ip_addr)
+
+    def test_get_camera_by_mac(self):
+        # Expected Behavior: get_feature_by_id must be usable with a given MAC Address.
+        with self.vimba:
+            # Verify that the Test Camera is a GigE - Camera
+            cam = self.vimba.get_camera_by_id(self.get_test_camera_id())
+            inter = self.vimba.get_interface_by_id(cam.get_interface_id())
+
+            if inter.get_type() != InterfaceType.Ethernet:
+                raise self.skipTest('Test requires GigE - Camera.')
+
+            # Lookup test cameras MAC Address.
+            with cam:
+                # Construct MAC Address from raw value.
+                mac_as_number = cam.get_feature_by_name('GevDeviceMACAddress').get()
+
+            mac_as_bytes = mac_as_number.to_bytes(6, byteorder='big')
+            mac_as_str = ''.join(format(s, '02x') for s in mac_as_bytes).upper()
+
+            # Verify that lookup with MAC Address returns the same Camera Object
+            self.assertEqual(self.vimba.get_camera_by_id(mac_as_str), cam)
+
+            # Verify that a lookup with an invalid MAC Address raises a VimbaCameraError
+            invalid_mac = 'ffffffff'
+            self.assertRaises(VimbaCameraError, self.vimba.get_camera_by_id, invalid_mac)

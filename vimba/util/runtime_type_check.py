@@ -44,14 +44,13 @@ __all__ = [
 
 
 class RuntimeTypeCheckEnable:
-    """ Decorator adding runtime Type checking to the Wrapped Callable.
+    """Decorator adding runtime type checking to the wrapped callable.
 
-    Each time the callable is executed, all arguments checked if they match with the given
-    Typehints. If all checks are passed, the wrapped function will be executed, if the given
-    Arguments to not match a TypeError is raised.
-    Note: This Decorator is no replacement for a feature complete TypeChecker supports only
-    a subset of all Types expressible by Typehints.
-
+    Each time the callable is executed, all arguments are checked if they match with the given
+    type hints. If all checks are passed, the wrapped function is executed, if the given
+    arguments to not match a TypeError is raised.
+    Note: This decorator is no replacement for a feature complete TypeChecker. It supports only
+    a subset of all types expressible by type hints.
     """
     _log = Log.get_instance()
 
@@ -94,6 +93,9 @@ class RuntimeTypeCheckEnable:
         if self.__matches_base_types(type_hint, arg):
             return True
 
+        elif self.__matches_type_types(type_hint, arg):
+            return True
+
         elif self.__matches_union_types(type_hint, arg):
             return True
 
@@ -109,6 +111,18 @@ class RuntimeTypeCheckEnable:
     def __matches_base_types(self, type_hint, arg) -> bool:
         return type_hint == type(arg)
 
+    def __matches_type_types(self, type_hint, arg) -> bool:
+        try:
+            if not type_hint.__origin__ == type:
+                return False
+
+            hint_args = type_hint.__args__
+
+        except AttributeError:
+            return False
+
+        return arg in hint_args
+
     def __matches_union_types(self, type_hint, arg) -> bool:
         try:
             if not type_hint.__origin__ == Union:
@@ -117,7 +131,12 @@ class RuntimeTypeCheckEnable:
         except AttributeError:
             return False
 
-        return type(arg) in type_hint.__args__
+        # If Matches if true for an Union hint:
+        for hint in type_hint.__args__:
+            if self.__matches(hint, arg):
+                return True
+
+        return False
 
     def __matches_tuple_types(self, type_hint, arg) -> bool:
         try:

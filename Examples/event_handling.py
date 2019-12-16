@@ -89,7 +89,7 @@ def get_camera(cam_id: Optional[str]):
         else:
             cams = vimba.get_all_cameras()
             if not cams:
-                abort('No Camera detected. Abort.'.format(cam_id))
+                abort('No Camera detected. Abort.')
 
             cam = cams[0]
 

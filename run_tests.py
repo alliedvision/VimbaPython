@@ -51,6 +51,8 @@ def stringify_list(l):
 def static_test():
     fprint('Execute Static Test: flake8')
     subprocess.run('flake8 vimba', shell=True)
+    subprocess.run('flake8 Examples --ignore=F405,F403', shell=True)
+    subprocess.run('flake8 Tests --ignore=F405,F403', shell=True)
     fprint('')
 
     fprint('Execute Static Test: mypy')
@@ -61,10 +63,10 @@ def static_test():
 def unit_test(testsuite, testcamera):
     fprint('Execute Unit tests and measure coverage:')
     if testsuite == 'basic':
-        cmd = 'coverage run Test/runner.py -s basic -o console'
+        cmd = 'coverage run --branch Test/runner.py -s basic -o console'
 
     else:
-        cmd = 'coverage run Test/runner.py -s {} -c {} -o console'
+        cmd = 'coverage run --branch Test/runner.py -s {} -c {} -o console'
         cmd = cmd.format(testsuite, testcamera)
 
     subprocess.run(cmd, shell=True)
@@ -90,6 +92,7 @@ def static_test_junit(report_dir):
     fprint('Execute Static Test: flake8')
     cmd = 'flake8 vimba --output-file=' + report_dir + '/flake8.txt'
     subprocess.run(cmd, shell=True)
+
     cmd = 'flake8_junit ' + report_dir + '/flake8.txt ' + report_dir + '/flake8_junit.xml'
     subprocess.run(cmd, shell=True)
     fprint('')
@@ -104,10 +107,10 @@ def unit_test_junit(report_dir, testsuite, testcamera):
     fprint('Execute Unit tests and measure coverage:')
 
     if testsuite == 'basic':
-        cmd = 'coverage run Test/runner.py -s basic -o junit_xml {}'.format(report_dir)
+        cmd = 'coverage run --branch Test/runner.py -s basic -o junit_xml {}'.format(report_dir)
 
     else:
-        cmd = 'coverage run Test/runner.py -s {} -c {} -o junit_xml {}'
+        cmd = 'coverage run --branch Test/runner.py -s {} -c {} -o junit_xml {}'
         cmd = cmd.format(testsuite, testcamera, report_dir)
 
     subprocess.run(cmd, shell=True)
