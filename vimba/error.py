@@ -37,6 +37,7 @@ __all__ = [
     'VimbaCameraError',
     'VimbaInterfaceError',
     'VimbaFeatureError',
+    'VimbaFrameError',
     'VimbaTimeout'
 ]
 
@@ -86,6 +87,11 @@ class VimbaFeatureError(_LoggedError):
     - Out of range values upon setting a value.
     - Failed lookup of features.
     """
+    pass
+
+
+class VimbaFrameError(_LoggedError):
+    """Error related to Frame data"""
     pass
 
 

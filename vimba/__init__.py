@@ -68,6 +68,7 @@ __all__ = [
     'VimbaCameraError',
     'VimbaInterfaceError',
     'VimbaFeatureError',
+    'VimbaFrameError',
     'VimbaTimeout',
 
     'IntFeature',
@@ -116,7 +117,7 @@ from .frame import PixelFormat, Frame, Debayer, intersect_pixel_formats, MONO_PI
                    COLOR_PIXEL_FORMATS, OPENCV_PIXEL_FORMATS, FrameStatus, FeatureTypes
 
 from .error import VimbaSystemError, VimbaCameraError, VimbaInterfaceError, VimbaFeatureError, \
-                   VimbaTimeout
+                   VimbaFrameError, VimbaTimeout
 
 from .feature import IntFeature, FloatFeature, StringFeature, BoolFeature, EnumEntry, EnumFeature, \
                      CommandFeature, RawFeature

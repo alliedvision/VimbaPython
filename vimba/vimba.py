@@ -472,6 +472,8 @@ class Vimba:
         @TraceEnable()
         @EnterContextOnCall()
         def _startup(self):
+            Log.get_instance().info('Starting {}'.format(self.get_version()))
+
             call_vimba_c('VmbStartup')
 
             self.__feats = discover_features(G_VIMBA_C_HANDLE)
