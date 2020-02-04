@@ -32,7 +32,6 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 
 import ctypes
 import sys
-
 from ctypes import byref, sizeof, c_char_p, POINTER as c_ptr
 from typing import Callable, Any, Tuple, Dict, List
 
@@ -342,7 +341,7 @@ _SIGNATURES = {
 }
 
 
-def _attach_signatures(lib_handle: ctypes.CDLL) -> ctypes.CDLL:
+def _attach_signatures(lib_handle):
     global _SIGNATURES
 
     for function_name, signature in _SIGNATURES.items():
@@ -353,7 +352,7 @@ def _attach_signatures(lib_handle: ctypes.CDLL) -> ctypes.CDLL:
     return lib_handle
 
 
-def _check_version(lib_handle: ctypes.CDLL) -> ctypes.CDLL:
+def _check_version(lib_handle):
     global EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION
     global VIMBA_IMAGE_TRANSFORM_VERSION
 
@@ -375,9 +374,7 @@ def _eval_vmberror(result: VmbError, func: Callable[..., Any], *args: Tuple[Any,
         raise VimbaCError(result)
 
 
-_lib_instance: ctypes.CDLL = _check_version(_attach_signatures(
-    load_vimba_lib('VimbaImageTransform'))
-)
+_lib_instance = _check_version(_attach_signatures(load_vimba_lib('VimbaImageTransform')))
 
 
 @TraceEnable()

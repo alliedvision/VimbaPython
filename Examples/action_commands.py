@@ -112,34 +112,6 @@ def get_command_sender(interface_id):
     return inter
 
 
-def set_feature(entity, feature_name: str, feature_value):
-    try:
-        entity.get_feature_by_name(feature_name).set(feature_value)
-
-    except VimbaFeatureError:
-        abort('Could not set Feature \'{}\'. Abort.'.format(feature_name))
-
-
-def command_run(entity, feature_name: str):
-    try:
-        entity.get_feature_by_name(feature_name).run()
-
-    except VimbaFeatureError:
-        abort('Failed to run Feature \'{}\'. Abort.'.format(feature_name))
-
-
-def command_run_and_wait(entity, feature_name: str):
-    try:
-        cmd_feat = entity.get_feature_by_name(feature_name)
-        cmd_feat.run()
-
-        while not cmd_feat.is_done():
-            pass
-
-    except VimbaFeatureError:
-        abort('Failed to run Feature \'{}\'. Abort.'.format(feature_name))
-
-
 def frame_handler(cam: Camera, frame: Frame):
     if frame.get_status() == FrameStatus.Complete:
         print('Frame(ID: {}) has been received.'.format(frame.get_id()), flush=True)
@@ -161,13 +133,16 @@ def main():
             group_key = 1
             group_mask = 1
 
-            command_run_and_wait(cam, 'GVSPAdjustPacketSize')
-            set_feature(cam, 'TriggerSelector', 'FrameStart')
-            set_feature(cam, 'TriggerSource', 'Action0')
-            set_feature(cam, 'TriggerMode', 'On')
-            set_feature(cam, 'ActionDeviceKey', device_key)
-            set_feature(cam, 'ActionGroupKey', group_key)
-            set_feature(cam, 'ActionGroupMask', group_mask)
+            cam.GVSPAdjustPacketSize.run()
+            while not cam.GVSPAdjustPacketSize.is_done():
+                pass
+
+            cam.TriggerSelector.set('FrameStart')
+            cam.TriggerSource.set('Action0')
+            cam.TriggerMode.set('On')
+            cam.ActionDeviceKey.set(device_key)
+            cam.ActionGroupKey.set(group_key)
+            cam.ActionGroupMask.set(group_mask)
 
             # Enter Streaming mode and wait for user input.
             try:
@@ -180,10 +155,10 @@ def main():
                         break
 
                     elif ch == 'a':
-                        set_feature(sender, 'ActionDeviceKey', device_key)
-                        set_feature(sender, 'ActionGroupKey', group_key)
-                        set_feature(sender, 'ActionGroupMask', group_mask)
-                        command_run(sender, 'ActionCommand')
+                        sender.ActionDeviceKey.set(device_key)
+                        sender.ActionGroupKey.set(group_key)
+                        sender.ActionGroupMask.set(group_mask)
+                        sender.ActionCommand.run()
 
             finally:
                 cam.stop_streaming()

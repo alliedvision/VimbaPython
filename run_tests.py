@@ -60,14 +60,16 @@ def static_test():
     fprint('')
 
 
-def unit_test(testsuite, testcamera):
+def unit_test(testsuite, testcamera, blacklist):
+    blacklist = " ".join(blacklist)
+
     fprint('Execute Unit tests and measure coverage:')
     if testsuite == 'basic':
-        cmd = 'coverage run --branch Test/runner.py -s basic -o console'
+        cmd = 'coverage run Test/runner.py -s basic -o console {}'.format(blacklist)
 
     else:
-        cmd = 'coverage run --branch Test/runner.py -s {} -c {} -o console'
-        cmd = cmd.format(testsuite, testcamera)
+        cmd = 'coverage run Test/runner.py -s {} -c {} -o console {}'
+        cmd = cmd.format(testsuite, testcamera, blacklist)
 
     subprocess.run(cmd, shell=True)
     fprint('')
@@ -103,22 +105,24 @@ def static_test_junit(report_dir):
     fprint('')
 
 
-def unit_test_junit(report_dir, testsuite, testcamera):
+def unit_test_junit(report_dir, testsuite, testcamera, blacklist):
     fprint('Execute Unit tests and measure coverage:')
 
+    blacklist = " ".join(blacklist)
     if testsuite == 'basic':
-        cmd = 'coverage run --branch Test/runner.py -s basic -o junit_xml {}'.format(report_dir)
+        cmd = 'coverage run --branch Test/runner.py -s basic -o junit_xml {} {}'
+        cmd = cmd.format(report_dir, blacklist)
 
     else:
-        cmd = 'coverage run --branch Test/runner.py -s {} -c {} -o junit_xml {}'
-        cmd = cmd.format(testsuite, testcamera, report_dir)
+        cmd = 'coverage run --branch Test/runner.py -s {} -c {} -o junit_xml {} {}'
+        cmd = cmd.format(testsuite, testcamera, report_dir, blacklist)
 
     subprocess.run(cmd, shell=True)
     fprint('')
 
     fprint('Generate Coverage reports:')
+    subprocess.run('coverage report -m', shell=True)
     subprocess.run('coverage xml -o ' + report_dir + '/coverage.xml', shell=True)
-    subprocess.run('coverage html -d ' + report_dir + '/coverage_html', shell=True)
     fprint('')
 
     coverage_file = '.coverage'
@@ -126,28 +130,29 @@ def unit_test_junit(report_dir, testsuite, testcamera):
         os.remove(coverage_file)
 
 
-def test(testsuite, testcamera):
+def test(testsuite, testcamera, blacklist):
     static_test()
-    unit_test(testsuite, testcamera)
+    unit_test(testsuite, testcamera, blacklist)
 
 
-def test_junit(report_dir, testsuite, testcamera):
+def test_junit(report_dir, testsuite, testcamera, blacklist):
     setup_junit(report_dir)
     static_test_junit(report_dir)
-    unit_test_junit(report_dir, testsuite, testcamera)
+    unit_test_junit(report_dir, testsuite, testcamera, blacklist)
 
 
 def main():
     CLI = """VimbaPython tests script.
     Usage:
         run_tests.py -h
-        run_tests.py test -s basic
-        run_tests.py test -s (real_cam | all) -c CAMERA_ID
-        run_tests.py test_junit -s basic
-        run_tests.py test_junit -s (real_cam | all) -c CAMERA_ID
+        run_tests.py test -s basic [BLACKLIST...]
+        run_tests.py test -s (real_cam | all) -c CAMERA_ID [BLACKLIST...]
+        run_tests.py test_junit -s basic [BLACKLIST...]
+        run_tests.py test_junit -s (real_cam | all) -c CAMERA_ID [BLACKLIST...]
 
     Arguments:
         CAMERA_ID    Camera Id from Camera that shall be used during testing
+        BLACKLIST    Optional sequence of unittest functions to skip.
 
     Options:
         -h   Show this screen.
@@ -159,14 +164,13 @@ def main():
     args = docopt.docopt(CLI)
 
     suite = 'basic' if args['basic'] else 'real_cam' if args['real_cam'] else 'all'
-    cam = args['CAMERA_ID']
 
     if args['test']:
-        test(suite, cam)
+        test(suite, args['CAMERA_ID'], args['BLACKLIST'])
 
     elif args['test_junit']:
         report_dir = 'Test_Reports'
-        test_junit(report_dir, suite, cam)
+        test_junit(report_dir, suite, args['CAMERA_ID'], args['BLACKLIST'])
 
 
 if __name__ == '__main__':

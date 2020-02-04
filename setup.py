@@ -26,16 +26,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import setuptools
-import vimba
-
+import os
 
 def read_file(name):
-    with open(name , 'r') as file:
+    print(name)
+    with open(file=name, mode='r', encoding='utf-8') as file:
         return file.read()
 
 
+def get_version(file_content):
+    print(file_content)
+    for line in file_content.splitlines():
+        line = line.strip()
+
+        if line.startswith('__version__'):
+            _, val = line.split('=')
+
+            return val.strip()
+
+    raise RuntimeError('Unable to extract __version__.')
+
+
 name = 'VimbaPython'
-version = vimba.__version__
+version = get_version(read_file(os.path.join('.', 'vimba', '__init__.py')))
 author = 'Allied Vision Technologies GmbH'
 description = 'Python Bindings for Allied Visions VimbaSDK'
 long_description = read_file('README.md')
@@ -73,4 +86,3 @@ setuptools.setup(
     python_requires=python_requires,
     extras_require=extras_require
 )
-

@@ -37,9 +37,11 @@ from .c_binding import VmbInterface, VmbInterfaceInfo, VmbHandle, VmbUint32
 from .feature import discover_features, FeatureTypes, FeaturesTuple, FeatureTypeTypes
 from .shared import filter_features_by_name, filter_features_by_type, filter_affected_features, \
                     filter_selected_features, filter_features_by_category, \
-                    read_memory_impl, write_memory_impl, read_registers_impl, write_registers_impl
+                    attach_feature_accessors, remove_feature_accessors, read_memory, \
+                    write_memory, read_registers, write_registers
 from .util import TraceEnable, RuntimeTypeCheckEnable, EnterContextOnCall, LeaveContextOnCall, \
                   RaiseIfOutsideContext
+from .error import VimbaFeatureError
 
 
 __all__ = [
@@ -154,7 +156,7 @@ class Interface:
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def read_memory(self, addr: int, max_bytes: int) -> bytes:
+    def read_memory(self, addr: int, max_bytes: int) -> bytes:  # coverage: skip
         """Read a byte sequence from a given memory address.
 
         Arguments:
@@ -171,12 +173,13 @@ class Interface:
             ValueError if max_bytes is negative.
             ValueError if the memory access was invalid.
         """
-        return read_memory_impl(self.__handle, addr, max_bytes)
+        # Note: Coverage is skipped. Function is untestable in a generic way.
+        return read_memory(self.__handle, addr, max_bytes)
 
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def write_memory(self, addr: int, data: bytes):
+    def write_memory(self, addr: int, data: bytes):  # coverage: skip
         """Write a byte sequence to a given memory address.
 
         Arguments:
@@ -188,12 +191,13 @@ class Interface:
             RuntimeError if called outside "with" - statement.
             ValueError if addr is negative.
         """
-        return write_memory_impl(self.__handle, addr, data)
+        # Note: Coverage is skipped. Function is untestable in a generic way.
+        return write_memory(self.__handle, addr, data)
 
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def read_registers(self, addrs: Tuple[int, ...]) -> Dict[int, int]:
+    def read_registers(self, addrs: Tuple[int, ...]) -> Dict[int, int]:  # coverage: skip
         """Read contents of multiple registers.
 
         Arguments:
@@ -208,12 +212,13 @@ class Interface:
             ValueError if any address in addrs is negative.
             ValueError if the register access was invalid.
         """
-        return read_registers_impl(self.__handle, addrs)
+        # Note: Coverage is skipped. Function is untestable in a generic way.
+        return read_registers(self.__handle, addrs)
 
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def write_registers(self, addrs_values: Dict[int, int]):
+    def write_registers(self, addrs_values: Dict[int, int]):  # coverage: skip
         """Write data to multiple registers.
 
         Arguments:
@@ -224,7 +229,8 @@ class Interface:
             ValueError if any address in addrs_values is negative.
             ValueError if the register access was invalid.
         """
-        return write_registers_impl(self.__handle, addrs_values)
+        # Note: Coverage is skipped. Function is untestable in a generic way.
+        return write_registers(self.__handle, addrs_values)
 
     @RaiseIfOutsideContext()
     def get_all_features(self) -> FeaturesTuple:
@@ -329,7 +335,12 @@ class Interface:
             RuntimeError if called outside "with" - statement.
             VimbaFeatureError if no feature is associated with 'feat_name'.
         """
-        return filter_features_by_name(self.__feats, feat_name)
+        feat = filter_features_by_name(self.__feats, feat_name)
+
+        if not feat:
+            raise VimbaFeatureError('Feature \'{}\' not found.'.format(feat_name))
+
+        return feat
 
     @TraceEnable()
     @EnterContextOnCall()
@@ -337,6 +348,7 @@ class Interface:
         call_vimba_c('VmbInterfaceOpen', self.__info.interfaceIdString, byref(self.__handle))
 
         self.__feats = discover_features(self.__handle)
+        attach_feature_accessors(self, self.__feats)
 
     @TraceEnable()
     @LeaveContextOnCall()
@@ -344,6 +356,7 @@ class Interface:
         for feat in self.__feats:
             feat.unregister_all_change_handlers()
 
+        remove_feature_accessors(self, self.__feats)
         self.__feats = ()
 
         call_vimba_c('VmbInterfaceClose', self.__handle)

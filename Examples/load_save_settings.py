@@ -105,15 +105,15 @@ def main():
 
             # Restore settings to initial value.
             try:
-                cam.get_feature_by_name('UserSetSelector').set('Default')
+                cam.UserSetSelector.set('Default')
 
-            except VimbaFeatureError:
+            except (AttributeError, VimbaFeatureError):
                 abort('Failed to set Feature \'UserSetSelector\'')
 
             try:
-                cam.get_feature_by_name('UserSetLoad').run()
+                cam.UserSetLoad.run()
 
-            except VimbaFeatureError:
+            except (AttributeError, VimbaFeatureError):
                 abort('Failed to run Feature \'UserSetLoad\'')
 
             # Load camera settings from file.

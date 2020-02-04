@@ -107,36 +107,13 @@ def setup_camera(cam: Camera):
     with cam:
         # Try to adjust GeV packet size. This Feature is only available for GigE - Cameras.
         try:
-            cmd_feat = cam.get_feature_by_name('GVSPAdjustPacketSize')
+            cam.GVSPAdjustPacketSize.run()
 
-            try:
-                cmd_feat.run()
+            while not cam.GVSPAdjustPacketSize.is_done():
+                pass
 
-                while not cmd_feat.is_done():
-                    pass
-
-            except VimbaFeatureError:
-                abort('Failed to set Feature \'GVSPAdjustPacketSize\'. Abort.')
-
-        except VimbaFeatureError:
+        except (AttributeError, VimbaFeatureError):
             pass
-
-
-def get_feature(cam: Camera, feature_name: str):
-    with cam:
-        try:
-            return cam.get_feature_by_name(feature_name)
-
-        except VimbaFeatureError:
-            abort('Failed to access Feature {}'.format(feature_name))
-
-
-def set_feature_value(feature, value):
-    try:
-        feature.set(value)
-
-    except VimbaFeatureError:
-        abort('Failed to set {} on Feature {}'.format(str(value), feature.get_name()))
 
 
 def feature_changed_handler(feature):
@@ -153,18 +130,15 @@ def main():
             setup_camera(cam)
 
             # Disable all events notifications
-            feat_event_select = get_feature(cam, 'EventSelector')
-            feat_event_notify = get_feature(cam, 'EventNotification')
-
-            for event in feat_event_select.get_available_entries():
-                set_feature_value(feat_event_select, event)
-                set_feature_value(feat_event_notify, 'Off')
+            for event in cam.EventSelector.get_available_entries():
+                cam.EventSelector.set(event)
+                cam.EventNotification.set('Off')
 
             # Enable event notifications on 'AcquisitionStart'
-            set_feature_value(get_feature(cam, 'EventSelector'), 'AcquisitionStart')
-            set_feature_value(get_feature(cam, 'EventNotification'), 'On')
+            cam.EventSelector.set('AcquisitionStart')
+            cam.EventNotification.set('On')
 
-            # Register Callable on all Feature in the '/EventControl/EventData' - category
+            # Register callable on all Features in the '/EventControl/EventData' - Category
             feats = cam.get_features_by_category('/EventControl/EventData')
 
             for feat in feats:

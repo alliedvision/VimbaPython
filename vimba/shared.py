@@ -45,10 +45,12 @@ __all__ = [
     'filter_features_by_name',
     'filter_features_by_type',
     'filter_features_by_category',
-    'read_memory_impl',
-    'write_memory_impl',
-    'read_registers_impl',
-    'write_registers_impl'
+    'attach_feature_accessors',
+    'remove_feature_accessors',
+    'read_memory',
+    'write_memory',
+    'read_registers',
+    'write_registers'
 ]
 
 
@@ -138,31 +140,18 @@ def filter_selected_features(feats: FeaturesTuple, feat: FeatureTypes) -> Featur
 
 
 @TraceEnable()
-def filter_features_by_name(feats: FeaturesTuple, feat_name: str, raises: bool = True):
+def filter_features_by_name(feats: FeaturesTuple, feat_name: str):
     """Search for a feature with a specific name within a feature set.
 
     Arguments:
         feats: Feature set to search in.
         feat_name: Feature name to look for.
-        raises: If True, raises runtime error on failed lookup, if false returns empty set.
-                This is used to suppress creation of a log entry while VimbaFeatureError
-                construction.
 
     Returns:
-        The Feature with the name 'feat_name'
-
-    Raises:
-        VimbaFeatureError if feature with name 'feat_name' can't be found in 'feats'.
+        The Feature with the name 'feat_name' or None if lookup failed
     """
     filtered = [feat for feat in feats if feat_name == feat.get_name()]
-
-    if not filtered and raises:
-        raise VimbaFeatureError('Feature \'{}\' not found.'.format(feat_name))
-
-    elif not filtered:
-        return ()
-
-    return filtered.pop()
+    return filtered.pop() if filtered else None
 
 
 @TraceEnable()
@@ -196,7 +185,41 @@ def filter_features_by_category(feats: FeaturesTuple, category: str) -> Features
 
 
 @TraceEnable()
-def read_memory_impl(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:
+def attach_feature_accessors(obj, feats: FeaturesTuple):
+    """Attach all Features in feats to obj under the feature name.
+
+    Arguments:
+        obj: Object feats should be attached on.
+        feats: Features to attach.
+    """
+    BLACKLIST = (
+        'PixelFormat',   # PixelFormats have special access methods.
+    )
+
+    for feat in feats:
+        feat_name = feat.get_name()
+        if feat_name not in BLACKLIST:
+            setattr(obj, feat_name, feat)
+
+
+@TraceEnable()
+def remove_feature_accessors(obj, feats: FeaturesTuple):
+    """Remove all Features in feats from obj.
+
+    Arguments:
+        obj: Object, feats should be removed from.
+        feats: Features to remove.
+    """
+    for feat in feats:
+        try:
+            delattr(obj, feat.get_name())
+
+        except AttributeError:
+            pass
+
+
+@TraceEnable()
+def read_memory(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:  # coverage: skip
     """Read a byte sequence from a given memory address.
 
     Arguments:
@@ -212,6 +235,7 @@ def read_memory_impl(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:
         ValueError if max_bytes is negative.
         ValueError if the memory access was invalid.
     """
+    # Note: Coverage is skipped. Function is untestable in a generic way.
     _verify_addr(addr)
     _verify_size(max_bytes)
 
@@ -229,7 +253,7 @@ def read_memory_impl(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:
 
 
 @TraceEnable()
-def write_memory_impl(handle: VmbHandle, addr: int, data: bytes):
+def write_memory(handle: VmbHandle, addr: int, data: bytes):  # coverage: skip
     """ Write a byte sequence to a given memory address.
 
     Arguments:
@@ -241,6 +265,7 @@ def write_memory_impl(handle: VmbHandle, addr: int, data: bytes):
         ValueError if addr is negative.
         ValueError if the memory access was invalid.
     """
+    # Note: Coverage is skipped. Function is untestable in a generic way.
     _verify_addr(addr)
 
     bytesWrite = VmbUint32()
@@ -254,7 +279,7 @@ def write_memory_impl(handle: VmbHandle, addr: int, data: bytes):
 
 
 @TraceEnable()
-def read_registers_impl(handle: VmbHandle, addrs: Tuple[int, ...]) -> Dict[int, int]:
+def read_registers(handle: VmbHandle, addrs: Tuple[int, ...]) -> Dict[int, int]:  # coverage: skip
     """Read contents of multiple registers.
 
     Arguments:
@@ -268,6 +293,7 @@ def read_registers_impl(handle: VmbHandle, addrs: Tuple[int, ...]) -> Dict[int, 
         ValueError if any address in addrs is negative.
         ValueError if the register access was invalid.
     """
+    # Note: Coverage is skipped. Function is untestable in a generic way.
     for addr in addrs:
         _verify_addr(addr)
 
@@ -291,7 +317,7 @@ def read_registers_impl(handle: VmbHandle, addrs: Tuple[int, ...]) -> Dict[int, 
 
 
 @TraceEnable()
-def write_registers_impl(handle: VmbHandle, addrs_values: Dict[int, int]):
+def write_registers(handle: VmbHandle, addrs_values: Dict[int, int]):  # coverage: skip
     """Write data to multiple Registers.
 
     Arguments:
@@ -302,6 +328,7 @@ def write_registers_impl(handle: VmbHandle, addrs_values: Dict[int, int]):
         ValueError if any address in addrs_values is negative.
         ValueError if the register access was invalid.
     """
+    # Note: Coverage is skipped. Function is untestable in a generic way.
     for addr in addrs_values:
         _verify_addr(addr)
 
@@ -323,11 +350,13 @@ def write_registers_impl(handle: VmbHandle, addrs_values: Dict[int, int]):
         raise ValueError(msg.format(repr(e.get_error_code()))) from e
 
 
-def _verify_addr(addr: int):
+def _verify_addr(addr: int):  # coverage: skip
+    # Note: Coverage is skipped. Function is untestable in a generic way.
     if addr < 0:
         raise ValueError('Given Address {} is negative'.format(addr))
 
 
-def _verify_size(size: int):
+def _verify_size(size: int):  # coverage: skip
+    # Note: Coverage is skipped. Function is untestable in a generic way.
     if size < 0:
         raise ValueError('Given size {} is negative'.format(size))

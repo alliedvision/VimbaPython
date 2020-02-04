@@ -37,10 +37,10 @@ import threading
 
 from typing import Tuple, Union, List, Callable, Optional, cast, Type
 from .c_binding import call_vimba_c, byref, sizeof, create_string_buffer, decode_cstr, \
-                       decode_flags
+                       decode_flags, build_callback_type
 from .c_binding import VmbFeatureInfo, VmbFeatureFlags, VmbUint32, VmbInt64, VmbHandle, \
-                       VmbFeatureVisibility, VmbBool, VmbInvalidationCallback, \
-                       VmbFeatureEnumEntry, VmbFeatureData, VmbError, VimbaCError, VmbDouble
+                       VmbFeatureVisibility, VmbBool, VmbFeatureEnumEntry, VmbFeatureData, \
+                       VmbError, VimbaCError, VmbDouble
 
 from .util import Log, TraceEnable, RuntimeTypeCheckEnable
 from .error import VimbaFeatureError
@@ -118,10 +118,9 @@ class _BaseFeature:
 
         self.__handlers: List[ChangeHandler] = []
         self.__handlers_lock = threading.Lock()
-        self.__feature_callback = VmbInvalidationCallback(self.__feature_cb_wrapper)
 
-    def __str__(self):
-        return 'Feature(name={}, type={})'.format(self.get_name(), self.get_type())
+        CallbackType = build_callback_type(None, VmbHandle, ctypes.c_char_p, ctypes.c_void_p)
+        self.__feature_callback = CallbackType(self.__feature_cb_wrapper)
 
     def __repr__(self):
         rep = 'Feature'
@@ -344,6 +343,13 @@ class BoolFeature(_BaseFeature):
         """Do not call directly. Instead, access Features via System, Camera, or Interface Types."""
         super().__init__(handle, info)
 
+    def __str__(self):
+        try:
+            return 'BoolFeature(name={}, value={})'.format(self.get_name(), self.get())
+
+        except Exception:
+            return 'BoolFeature(name={})'.format(self.get_name())
+
     @TraceEnable()
     def get(self) -> bool:
         """Get current feature value of type bool.
@@ -372,21 +378,21 @@ class BoolFeature(_BaseFeature):
         return c_val.value
 
     @TraceEnable()
-    @RuntimeTypeCheckEnable()
-    def set(self, val: bool):
+    def set(self, val):
         """Set current feature value of type bool.
 
         Arguments:
             val - The boolean value to set.
 
         Raises:
-            TypeError if parameters do not match their type hint.
             VimbaFeatureError if access rights are not sufficient.
             VimbaFeatureError if called with an invalid value.
             VimbaFeatureError if executed within a registered change_handler.
         """
+        as_bool = bool(val)
+
         try:
-            call_vimba_c('VmbFeatureBoolSet', self._handle, self._info.name, val)
+            call_vimba_c('VmbFeatureBoolSet', self._handle, self._info.name, as_bool)
 
         except VimbaCError as e:
             err = e.get_error_code()
@@ -395,7 +401,7 @@ class BoolFeature(_BaseFeature):
                 exc = self._build_access_error()
 
             elif err == VmbError.InvalidValue:
-                exc = self._build_value_error(val)
+                exc = self._build_value_error(as_bool)
 
             elif err == VmbError.InvalidCall:
                 exc = self._build_within_callback_error()
@@ -421,6 +427,9 @@ class CommandFeature(_BaseFeature):
     def __init__(self, handle: VmbHandle, info: VmbFeatureInfo):
         """Do not call directly. Instead, access Features via System, Camera, or Interface types."""
         super().__init__(handle, info)
+
+    def __str__(self):
+        return 'CommandFeature(name={})'.format(self.get_name())
 
     @TraceEnable()
     def run(self):
@@ -482,26 +491,20 @@ class EnumEntry:
         self.__info: VmbFeatureEnumEntry = info
 
     def __str__(self):
-        return self.as_string()
+        """Get EnumEntry as str"""
+        return bytes(self).decode()
 
     def __int__(self):
-        return self.as_int()
-
-    def as_bytes(self) -> bytes:
-        """Get EnumEntry as bytes"""
-        return self.__info.name
-
-    def as_string(self) -> str:
-        """Get EnumEntry as str"""
-        return self.as_bytes().decode()
-
-    def as_int(self) -> int:
         """Get EnumEntry as int"""
         return self.__info.intValue
 
+    def __bytes__(self):
+        """Get EnumEntry as bytes"""
+        return self.__info.name
+
     def as_tuple(self) -> Tuple[str, int]:
         """Get EnumEntry in str and int representation"""
-        return (self.as_string(), self.as_int())
+        return (str(self), int(self))
 
     @TraceEnable()
     def is_available(self) -> bool:
@@ -533,6 +536,13 @@ class EnumFeature(_BaseFeature):
         super().__init__(handle, info)
 
         self.__entries: EnumEntryTuple = _discover_enum_entries(self._handle, self._info.name)
+
+    def __str__(self):
+        try:
+            return 'EnumFeature(name={}, value={})'.format(self.get_name(), str(self.get()))
+
+        except Exception:
+            return 'EnumFeature(name={})'.format(self.get_name())
 
     def get_all_entries(self) -> EnumEntryTuple:
         """Get a set of all possible EnumEntries of this feature."""
@@ -590,7 +600,6 @@ class EnumFeature(_BaseFeature):
         return self.get_entry(c_val.value.decode() if c_val.value else '')
 
     @TraceEnable()
-    @RuntimeTypeCheckEnable()
     def set(self, val: Union[int, str, EnumEntry]):
         """Set current feature value of type EnumFeature.
 
@@ -598,24 +607,18 @@ class EnumFeature(_BaseFeature):
             val - The value to set. Can be int, or str, or EnumEntry.
 
         Raises:
-            TypeError if parameters do not match their type hint.
             VimbaFeatureError if val is of type int or str and does not match an EnumEntry.
             VimbaFeatureError if access rights are not sufficient.
             VimbaFeatureError if executed within a registered change_handler.
         """
-        type_info = type(val)
-
-        if type_info == EnumEntry:
-            val = self.get_entry(str(val))
-
-        elif type_info == str:
-            val = self.get_entry(cast(str, val))
+        if type(val) in (EnumEntry, str):
+            as_entry = self.get_entry(str(val))
 
         else:
-            val = self.get_entry(cast(int, val))
+            as_entry = self.get_entry(int(val))
 
         try:
-            call_vimba_c('VmbFeatureEnumSet', self._handle, self._info.name, val.as_bytes())
+            call_vimba_c('VmbFeatureEnumSet', self._handle, self._info.name, bytes(as_entry))
 
         except VimbaCError as e:
             err = e.get_error_code()
@@ -664,6 +667,14 @@ class FloatFeature(_BaseFeature):
     def __init__(self, handle: VmbHandle, info: VmbFeatureInfo):
         """Do not call directly. Instead, access Features via System, Camera, or Interface Types."""
         super().__init__(handle, info)
+
+    def __str__(self):
+        try:
+            msg = 'FloatFeature(name={}, value={}, range={}, increment={})'
+            return msg.format(self.get_name(), self.get(), self.get_range(), self.get_increment())
+
+        except Exception:
+            return 'FloatFeature(name={})'.format(self.get_name())
 
     @TraceEnable()
     def get(self) -> float:
@@ -748,7 +759,6 @@ class FloatFeature(_BaseFeature):
         return c_val.value if c_has_val else None
 
     @TraceEnable()
-    @RuntimeTypeCheckEnable()
     def set(self, val: float):
         """Set current value of type float.
 
@@ -756,13 +766,14 @@ class FloatFeature(_BaseFeature):
             val - The float value to set.
 
         Raises:
-            TypeError if parameters do not match their type hint.
             VimbaFeatureError if access rights are not sufficient.
             VimbaFeatureError if value is out of bounds.
             VimbaFeatureError if executed within a registered change_handler.
         """
+        as_float = float(val)
+
         try:
-            call_vimba_c('VmbFeatureFloatSet', self._handle, self._info.name, val)
+            call_vimba_c('VmbFeatureFloatSet', self._handle, self._info.name, as_float)
 
         except VimbaCError as e:
             err = e.get_error_code()
@@ -771,7 +782,7 @@ class FloatFeature(_BaseFeature):
                 exc = self._build_access_error()
 
             elif err == VmbError.InvalidValue:
-                exc = self._build_value_error(val)
+                exc = self._build_value_error(as_float)
 
             elif err == VmbError.InvalidCall:
                 exc = self._build_within_callback_error()
@@ -799,6 +810,14 @@ class IntFeature(_BaseFeature):
     def __init__(self, handle: VmbHandle, info: VmbFeatureInfo):
         """Do not call directly. Instead, access Features via System, Camera, or Interface Types."""
         super().__init__(handle, info)
+
+    def __str__(self):
+        try:
+            msg = 'IntFeature(name={}, value={}, range={}, increment={})'
+            return msg.format(self.get_name(), self.get(), self.get_range(), self.get_increment())
+
+        except Exception:
+            return 'IntFeature(name={})'.format(self.get_name())
 
     @TraceEnable()
     def get(self) -> int:
@@ -881,7 +900,6 @@ class IntFeature(_BaseFeature):
         return c_val.value
 
     @TraceEnable()
-    @RuntimeTypeCheckEnable()
     def set(self, val: int):
         """Set current value of type int.
 
@@ -889,13 +907,14 @@ class IntFeature(_BaseFeature):
             val - The int value to set.
 
         Raises:
-            TypeError if parameters do not match their type hint.
             VimbaFeatureError if access rights are not sufficient.
             VimbaFeatureError if value is out of bounds or misaligned to the increment.
             VimbaFeatureError if executed within a registered change_handler.
         """
+        as_int = int(val)
+
         try:
-            call_vimba_c('VmbFeatureIntSet', self._handle, self._info.name, val)
+            call_vimba_c('VmbFeatureIntSet', self._handle, self._info.name, as_int)
 
         except VimbaCError as e:
             err = e.get_error_code()
@@ -904,7 +923,7 @@ class IntFeature(_BaseFeature):
                 exc = self._build_access_error()
 
             elif err == VmbError.InvalidValue:
-                exc = self._build_value_error(val)
+                exc = self._build_value_error(as_int)
 
             elif err == VmbError.InvalidCall:
                 exc = self._build_within_callback_error()
@@ -940,8 +959,16 @@ class RawFeature(_BaseFeature):
         """Do not call directly. Instead, access Features via System, Camera, or Interface Types."""
         super().__init__(handle, info)
 
+    def __str__(self):
+        try:
+            msg = 'RawFeature(name={}, value={}, length={})'
+            return msg.format(self.get_name(), self.get(), self.length())
+
+        except Exception:
+            return 'RawFeature(name={})'.format(self.get_name())
+
     @TraceEnable()
-    def get(self) -> bytes:
+    def get(self) -> bytes:  # coverage: skip
         """Get current value as a sequence of bytes
 
         Returns:
@@ -950,6 +977,7 @@ class RawFeature(_BaseFeature):
         Raises:
             VimbaFeatureError if access rights are not sufficient.
         """
+        # Note: Coverage is skipped. RawFeature is not testable in a generic way
         c_buf_avail = VmbUint32()
         c_buf_len = self.length()
         c_buf = create_string_buffer(c_buf_len)
@@ -970,20 +998,21 @@ class RawFeature(_BaseFeature):
         return c_buf.raw[:c_buf_avail.value]
 
     @TraceEnable()
-    @RuntimeTypeCheckEnable()
-    def set(self, buf: bytes):
+    def set(self, buf: bytes):  # coverage: skip
         """Set current value as a sequence of bytes.
 
         Arguments:
             val - The value to set.
 
         Raises:
-            TypeError if parameters do not match their type hint.
             VimbaFeatureError if access rights are not sufficient.
             VimbaFeatureError if executed within a registered change_handler.
         """
+        # Note: Coverage is skipped. RawFeature is not testable in a generic way
+        as_bytes = bytes(buf)
+
         try:
-            call_vimba_c('VmbFeatureRawSet', self._handle, self._info.name, buf, len(buf))
+            call_vimba_c('VmbFeatureRawSet', self._handle, self._info.name, as_bytes, len(as_bytes))
 
         except VimbaCError as e:
             err = e.get_error_code()
@@ -1000,7 +1029,7 @@ class RawFeature(_BaseFeature):
             raise exc from e
 
     @TraceEnable()
-    def length(self) -> int:
+    def length(self) -> int:  # coverage: skip
         """Get length of byte sequence representing the value.
 
         Returns:
@@ -1009,6 +1038,7 @@ class RawFeature(_BaseFeature):
         Raises:
             VimbaFeatureError if access rights are not sufficient.
         """
+        # Note: Coverage is skipped. RawFeature is not testable in a generic way
         c_val = VmbUint32()
 
         try:
@@ -1034,6 +1064,14 @@ class StringFeature(_BaseFeature):
     def __init__(self, handle: VmbHandle, info: VmbFeatureInfo):
         """Do not call directly. Instead, access Features via System, Camera or Interface Types."""
         super().__init__(handle, info)
+
+    def __str__(self):
+        try:
+            msg = 'StringFeature(name={}, value={}, max_length={})'
+            return msg.format(self.get_name(), self.get(), self.get_max_length())
+
+        except Exception:
+            return 'StringFeature(name={})'.format(self.get_name())
 
     @TraceEnable()
     def get(self) -> str:
@@ -1080,7 +1118,6 @@ class StringFeature(_BaseFeature):
         return c_buf.value.decode()
 
     @TraceEnable()
-    @RuntimeTypeCheckEnable()
     def set(self, val: str):
         """Set current value of type str.
 
@@ -1088,13 +1125,15 @@ class StringFeature(_BaseFeature):
             val - The str value to set.
 
         Raises:
-            TypeError if parameters do not match their type hint.
             VimbaFeatureError if access rights are not sufficient.
             VimbaFeatureError if val exceeds the maximum string length.
             VimbaFeatureError if executed within a registered change_handler.
         """
+        as_str = str(val)
+
         try:
-            call_vimba_c('VmbFeatureStringSet', self._handle, self._info.name, val.encode('utf8'))
+            call_vimba_c('VmbFeatureStringSet', self._handle, self._info.name,
+                         as_str.encode('utf8'))
 
         except VimbaCError as e:
             err = e.get_error_code()
@@ -1103,7 +1142,7 @@ class StringFeature(_BaseFeature):
                 exc = self._build_access_error()
 
             elif err == VmbError.InvalidValue:
-                exc = self.__build_value_error(val)
+                exc = self.__build_value_error(as_str)
 
             elif err == VmbError.InvalidCall:
                 exc = self._build_within_callback_error()
@@ -1168,29 +1207,27 @@ def _build_feature(handle: VmbHandle, info: VmbFeatureInfo) -> FeatureTypes:
     feat_value = VmbFeatureData(info.featureDataType)
 
     if VmbFeatureData.Int == feat_value:
-        return IntFeature(handle, info)
+        feat = IntFeature(handle, info)
 
     elif VmbFeatureData.Float == feat_value:
-        return FloatFeature(handle, info)
+        feat = FloatFeature(handle, info)
 
     elif VmbFeatureData.String == feat_value:
-        return StringFeature(handle, info)
+        feat = StringFeature(handle, info)
 
     elif VmbFeatureData.Bool == feat_value:
-        return BoolFeature(handle, info)
+        feat = BoolFeature(handle, info)
 
     elif VmbFeatureData.Enum == feat_value:
-        return EnumFeature(handle, info)
+        feat = EnumFeature(handle, info)
 
     elif VmbFeatureData.Command == feat_value:
-        return CommandFeature(handle, info)
+        feat = CommandFeature(handle, info)
 
-    elif VmbFeatureData.Raw == feat_value:
-        return RawFeature(handle, info)
+    else:
+        feat = RawFeature(handle, info)
 
-    # This should never happen because all possible types are handled.
-    # However the static type checker will not accept None as an return.
-    raise VimbaFeatureError('Unhandled feature type.')
+    return feat
 
 
 @TraceEnable()

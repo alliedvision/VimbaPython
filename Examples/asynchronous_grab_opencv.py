@@ -97,32 +97,26 @@ def setup_camera(cam: Camera):
     with cam:
         # Enable auto exposure time setting if camera supports it
         try:
-            cam.get_feature_by_name('ExposureAuto').set('Continuous')
+            cam.ExposureAuto.set('Continuous')
 
-        except VimbaFeatureError:
+        except (AttributeError, VimbaFeatureError):
             pass
 
         # Enable white balancing if camera supports it
         try:
-            cam.get_feature_by_name('BalanceWhiteAuto').set('Continuous')
+            cam.BalanceWhiteAuto.set('Continuous')
 
-        except VimbaFeatureError:
+        except (AttributeError, VimbaFeatureError):
             pass
 
         # Try to adjust GeV packet size. This Feature is only available for GigE - Cameras.
         try:
-            cmd_feat = cam.get_feature_by_name('GVSPAdjustPacketSize')
+            cam.GVSPAdjustPacketSize.run()
 
-            try:
-                cmd_feat.run()
+            while not cam.GVSPAdjustPacketSize.is_done():
+                pass
 
-                while not cmd_feat.is_done():
-                    pass
-
-            except VimbaFeatureError:
-                abort('Failed to set Feature \'GVSPAdjustPacketSize\'. Abort.')
-
-        except VimbaFeatureError:
+        except (AttributeError, VimbaFeatureError):
             pass
 
         # Query available, open_cv compatible pixel formats
@@ -155,12 +149,13 @@ class Handler:
             self.shutdown_event.set()
             return
 
-        else:
+        elif frame.get_status() == FrameStatus.Complete:
             print('{} acquired {}'.format(cam, frame), flush=True)
 
             msg = 'Stream from \'{}\'. Press <Enter> to stop stream.'
             cv2.imshow(msg.format(cam.get_name()), frame.as_opencv_image())
-            cam.queue_frame(frame)
+
+        cam.queue_frame(frame)
 
 
 def main():

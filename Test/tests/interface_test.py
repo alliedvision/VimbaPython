@@ -157,7 +157,7 @@ class InterfaceTest(unittest.TestCase):
                 with inter:
                     pass
 
-    def test_interface_api_context_sensitity_inside_context(self):
+    def test_interface_api_context_sensitivity_inside_context(self):
         # Expectation: Interface has functions that shall only be callable inside the Context,
         # calling outside must cause a runtime error. This test check only if the RuntimeErrors
         # are triggered then called Outside of the with block.

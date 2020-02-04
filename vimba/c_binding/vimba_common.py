@@ -39,6 +39,7 @@ import functools
 from typing import Tuple, List
 from ..error import VimbaSystemError
 
+
 __all__ = [
     'Int32Enum',
     'Uint32Enum',
@@ -463,14 +464,14 @@ def fmt_flags_repr(fmt: str, enum_type, enum_val):
     return fmt.format(_repr_flags_list(enum_type, enum_val))
 
 
-def load_vimba_lib(vimba_project: str) -> ctypes.CDLL:
+def load_vimba_lib(vimba_project: str):
     """ Load shared library shipped with the Vimba installation
 
     Arguments:
         vimba_project - Library name without prefix or extension
 
     Return:
-        CDLL Handle on loaded library
+        CDLL or WinDLL Handle on loaded library
 
     Raises:
         VimbaSystemError if given library could not be loaded.
@@ -488,7 +489,7 @@ def load_vimba_lib(vimba_project: str) -> ctypes.CDLL:
     return platform_handlers[sys.platform](vimba_project)
 
 
-def _load_under_linux(vimba_project: str) -> ctypes.CDLL:
+def _load_under_linux(vimba_project: str):
     # Construct VimbaHome based on TL installation paths
     tl_paths = os.environ.get('GENICAM_GENTL32_PATH', "")
     tl_paths += os.environ.get('GENICAM_GENTL64_PATH', "")
@@ -516,17 +517,17 @@ def _load_under_linux(vimba_project: str) -> ctypes.CDLL:
 
     arch = platform.machine()
 
-    # Linux x86 64 Bit
+    # Linux x86 64 Bit (Requires additional interpreter version check)
     if arch == 'x86_64':
-        dir_ = 'x86_64bit'
+        dir_ = 'x86_64bit' if _is_python_64_bit() else 'x86_32bit'
 
     # Linux x86 32 Bit
     elif arch == 'i386':
         dir_ = 'x86_32bit'
 
-    # Linux arm 64 Bit:
+    # Linux arm 64 Bit (Requires additional interpreter version check)
     elif arch == 'aarch64':
-        dir_ = 'arm_64bit'
+        dir_ = 'arm_64bit' if _is_python_64_bit() else 'arm_32bit'
 
     # Linux arm 32 Bit:
     elif arch == 'armv7l':
@@ -538,41 +539,45 @@ def _load_under_linux(vimba_project: str) -> ctypes.CDLL:
     lib_name = 'lib{}.so'.format(vimba_project)
     lib_path = os.path.join(vimba_home, vimba_project, 'DynamicLib', dir_, lib_name)
 
-    failed = False
-
     try:
         lib = ctypes.cdll.LoadLibrary(lib_path)
 
-    except OSError:
-        failed = True
-
-    if failed:
+    except OSError as e:
         msg = 'Failed to load library \'{}\'. Please verify Vimba installation.'
-        raise VimbaSystemError(msg.format(lib_path))
+        raise VimbaSystemError(msg.format(lib_path)) from e
 
     return lib
 
 
-def _load_under_windows(vimba_project: str) -> ctypes.CDLL:
+def _load_under_windows(vimba_project: str):
     vimba_home = os.environ.get('VIMBA_HOME')
 
     if vimba_home is None:
         raise VimbaSystemError('Variable VIMBA_HOME not set. Please verify Vimba installation.')
 
-    dir_ = 'Win64' if platform.machine() == 'AMD64' else 'Win32'
+    load_64bit = True if (platform.machine() == 'AMD64') and _is_python_64_bit() else False
     lib_name = '{}.dll'.format(vimba_project)
-    lib_path = os.path.join(vimba_home, vimba_project, 'Bin', dir_, lib_name)
-
-    failed = False
+    lib_path = os.path.join(vimba_home, vimba_project, 'Bin', 'Win64' if load_64bit else 'Win32',
+                            lib_name)
 
     try:
-        lib = ctypes.cdll.LoadLibrary(lib_path)
+        # Load Library with 64 Bit and use cdecl call convention
+        if load_64bit:
+            lib = ctypes.cdll.LoadLibrary(lib_path)
 
-    except OSError:
-        failed = True
+        # Load Library with 32 Bit and use stdcall call convention
+        else:
+            lib = ctypes.windll.LoadLibrary(lib_path)
 
-    if failed:
+    except OSError as e:
         msg = 'Failed to load library \'{}\'. Please verify Vimba installation.'
-        raise VimbaSystemError(msg.format(lib_path))
+        raise VimbaSystemError(msg.format(lib_path)) from e
 
     return lib
+
+
+def _is_python_64_bit() -> bool:
+    # Query if the currently running python interpreter is build as 64 bit binary.
+    # The default method of getting this information seems to be rather hacky
+    # (check if maxint > 2^32) but it seems to be the way to do this....
+    return True if sys.maxsize > 2**32 else False

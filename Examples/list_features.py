@@ -79,10 +79,7 @@ def print_feature(feature):
     try:
         value = feature.get()
 
-    except AttributeError:
-        value = None
-
-    except VimbaFeatureError:
+    except (AttributeError, VimbaFeatureError):
         value = None
 
     print('/// Feature name   : {}'.format(feature.get_name()))

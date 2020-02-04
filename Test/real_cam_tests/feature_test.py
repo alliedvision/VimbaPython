@@ -176,6 +176,16 @@ class CamBaseFeatureTest(unittest.TestCase):
 
         self.assertEqual(handler.call_cnt, 1)
 
+    def test_stringify_features(self):
+        # Expectation: Each Feature must have a __str__ method. Depending on the Feature
+        # current Values are queried, this can fail. In those cases, all exceptions are
+        # fetched -> all features must be strinify able without raising any exception
+        for feat in self.vimba.get_all_features():
+            self.assertNoRaise(str, feat)
+
+        for feat in self.cam.get_all_features():
+            self.assertNoRaise(str, feat)
+
 
 class CamBoolFeatureTest(unittest.TestCase):
     def setUp(self):
@@ -203,10 +213,6 @@ class CamBoolFeatureTest(unittest.TestCase):
     def test_set(self):
         # Expectation: Raises invalid Access on non-writeable features.
         self.assertRaises(VimbaFeatureError, self.feat.set, True)
-
-    def test_runtime_check_failure(self):
-        # Expectation: Set must throw TypeError on non-boolean input.
-        self.assertRaises(TypeError, self.feat.set, 'Hi')
 
 
 class CamCommandFeatureTest(unittest.TestCase):
@@ -278,19 +284,7 @@ class CamEnumFeatureTest(unittest.TestCase):
         expected = b'MultiFrame'
         entry = self.feat_rw.get_entry('MultiFrame')
 
-        self.assertEqual(entry.as_bytes(), expected)
-
-    def test_entry_as_int(self):
-        # Expectation: Get EnumEntry as int
-        entry = self.feat_rw.get_entry('MultiFrame')
-
-        self.assertEqual(entry.as_int(), int(entry))
-
-    def test_entry_as_str(self):
-        # Expectation: Get EnumEntry as str
-        entry = self.feat_rw.get_entry('MultiFrame')
-
-        self.assertEqual(entry.as_string(), str(entry))
+        self.assertEqual(bytes(entry), expected)
 
     def test_entry_as_tuple(self):
         # Expectation: Get EnumEntry as (str, int)
@@ -456,17 +450,6 @@ class CamEnumFeatureTest(unittest.TestCase):
             self.feat_rw.unregister_change_handler(handler)
             self.feat_rw.set(old_entry)
 
-    def test_runtime_check_failure(self):
-        # Expectation: TypeError must raise TypeError if:
-        # set() is called with non int, str, EnumEntry
-        # get_entry() is called with non int, str
-
-        self.assertRaises(TypeError, self.feat_r.set, 0.0)
-        self.assertRaises(TypeError, self.feat_rw.set, b'bytes')
-
-        self.assertRaises(TypeError, self.feat_r.get_entry, 0.0)
-        self.assertRaises(TypeError, self.feat_rw.get_entry, b'bytes')
-
 
 class CamFloatFeatureTest(unittest.TestCase):
     def setUp(self):
@@ -597,11 +580,6 @@ class CamFloatFeatureTest(unittest.TestCase):
         finally:
             self.feat_rw.unregister_change_handler(handler)
             self.feat_rw.set(old_entry)
-
-    def test_runtime_check_failure(self):
-        # Expectation: TypeError must be thrown is param for set in not float
-        self.assertRaises(TypeError, self.feat_r.set, 'str')
-        self.assertRaises(TypeError, self.feat_rw.set, 0)
 
 
 class CamIntFeatureTest(unittest.TestCase):
@@ -734,7 +712,126 @@ class CamIntFeatureTest(unittest.TestCase):
             self.feat_rw.unregister_change_handler(handler)
             self.feat_rw.set(old_entry)
 
-    def test_runtime_check_failure(self):
-        # Expectation: set must raise TypeError on any non int param
-        self.assertRaises(TypeError, self.feat_r.set, 0.0)
-        self.assertRaises(TypeError, self.feat_rw.set, 'no int')
+
+class CamStringFeatureTest(unittest.TestCase):
+    def setUp(self):
+        self.vimba = Vimba.get_instance()
+        self.vimba._startup()
+
+        try:
+            self.cam = self.vimba.get_camera_by_id(self.get_test_camera_id())
+
+        except VimbaCameraError as e:
+            self.vimba._shutdown()
+            raise Exception('Failed to lookup Camera.') from e
+
+        try:
+            self.cam._open()
+
+        except VimbaCameraError as e:
+            self.vimba._shutdown()
+            raise Exception('Failed to open Camera.') from e
+
+        self.feat_r = None
+        feats = self.cam.get_features_by_type(StringFeature)
+
+        for feat in feats:
+            if feat.get_access_mode() == (True, False):
+                self.feat_r = feat
+
+        if self.feat_r is None:
+            self.cam._close()
+            self.vimba._shutdown()
+            self.skipTest('Test requires read only StringFeature.')
+
+        self.feat_rw = None
+        feats = self.cam.get_features_by_type(StringFeature)
+
+        for feat in feats:
+            if feat.get_access_mode() == (True, True):
+                self.feat_rw = feat
+
+        if self.feat_rw is None:
+            self.cam._close()
+            self.vimba._shutdown()
+            self.skipTest('Test requires read/write StringFeature.')
+
+    def tearDown(self):
+        self.cam._close()
+        self.vimba._shutdown()
+
+    def test_get_type(self):
+        # Expectation: StringFeature must return StringFeature on get_type
+        self.assertEqual(self.feat_r.get_type(), StringFeature)
+        self.assertEqual(self.feat_rw.get_type(), StringFeature)
+
+    def test_get(self):
+        # Expectation: Get current value without raising an exception
+        self.assertNoRaise(self.feat_r.get)
+        self.assertNoRaise(self.feat_rw.get)
+
+    def test_get_max_length(self):
+        # Expectation: Get maximum string length
+        self.assertNoRaise(self.feat_r.get_max_length)
+        self.assertNoRaise(self.feat_rw.get_max_length)
+
+    def test_set(self):
+        # Expectation:
+        # 1) Setting a read only feature must raise a VimbaFeatureError
+        # 2) Setting a read/wrtie must raise VimbaFeatureError if the string is
+        #    longer than max length
+        # 3) Setting a read/write feature must work if string is long enough
+
+        # Ensure Expectation 1
+        self.assertRaises(VimbaFeatureError, self.feat_r.set, self.feat_r.get())
+        self.assertNoRaise(self.feat_rw.set, self.feat_rw.get())
+
+        # Ensure Expectation 2
+        old_val = self.feat_rw.get()
+
+        try:
+            invalid = 'a' * self.feat_rw.get_max_length()
+            self.assertRaises(VimbaFeatureError, self.feat_rw.set, invalid)
+
+        finally:
+            self.feat_rw.set(old_val)
+
+        # Ensure Expectation 3
+        try:
+            valid = 'a' * (self.feat_rw.get_max_length() -1)
+            self.assertNoRaise(self.feat_rw.set, valid)
+            self.assertEqual(valid, self.feat_rw.get())
+
+        finally:
+            self.feat_rw.set(old_val)
+
+
+    def test_set_in_callback(self):
+        # Expectation: Setting a value within a Callback must raise a VimbaFeatureError
+
+        class Handler:
+            def __init__(self):
+                self.raised = False
+                self.event = threading.Event()
+
+            def __call__(self, feat):
+                try:
+                    feat.set(feat.get())
+
+                except VimbaFeatureError:
+                    self.raised = True
+
+                self.event.set()
+
+        try:
+            handler = Handler()
+            self.feat_rw.register_change_handler(handler)
+
+            self.feat_rw.set(self.feat_rw.get())
+
+            handler.event.wait()
+
+            self.assertTrue(handler.raised)
+
+        finally:
+            self.feat_rw.unregister_change_handler(handler)

@@ -154,9 +154,9 @@ class FrameProducer(threading.Thread):
 
         # Try to enable automatic exposure time setting
         try:
-            self.cam.get_feature_by_name('ExposureAuto').set('Once')
+            self.cam.ExposureAuto.set('Once')
 
-        except VimbaFeatureError:
+        except (AttributeError, VimbaFeatureError):
             self.log.info('Camera {}: Failed to set Feature \'ExposureAuto\'.'.format(
                           self.cam.get_id()))
 

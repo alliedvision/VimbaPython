@@ -146,39 +146,35 @@ class CamCameraTest(unittest.TestCase):
 
             self.assertIn(payload_size, self.cam.get_features_affected_by(affect))
 
-    def test_camera_frame_iterator_limit_set(self):
-        # Expectation: The Frame Iterator fetches the given number of images.
+    def test_camera_frame_generator_limit_set(self):
+        # Expectation: The Frame generator fetches the given number of images.
         with self.cam:
-            self.assertEqual(len([i for i in self.cam.get_frame_iter(0)]), 0)
-            self.assertEqual(len([i for i in self.cam.get_frame_iter(1)]), 1)
-            self.assertEqual(len([i for i in self.cam.get_frame_iter(7)]), 7)
-            self.assertEqual(len([i for i in self.cam.get_frame_iter(11)]), 11)
+            self.assertEqual(len([i for i in self.cam.get_frame_generator(0)]), 0)
+            self.assertEqual(len([i for i in self.cam.get_frame_generator(1)]), 1)
+            self.assertEqual(len([i for i in self.cam.get_frame_generator(7)]), 7)
+            self.assertEqual(len([i for i in self.cam.get_frame_generator(11)]), 11)
 
-    def test_camera_frame_iterator_error(self):
-        # Expectation: The Frame Iterator raises a VimbaCameraError on a
-        # negative limit and the camera raises an VimbaCameraError
+    def test_camera_frame_generator_error(self):
+        # Expectation: The Frame generator raises a ValueError on a
+        # negative limit and the camera raises an ValueError
         # if the camera is not opened.
 
-        # Iterator execution must throw if streaming is enabled
+        # generator execution must throw if streaming is enabled
         with self.cam:
             # Check limits
-            self.assertRaises(ValueError, self.cam.get_frame_iter, -1)
-            self.assertRaises(ValueError, self.cam.get_frame_iter, 1, 0)
-            self.assertRaises(ValueError, self.cam.get_frame_iter, 1, -1)
+            self.assertRaises(ValueError, self.cam.get_frame_generator, -1)
+            self.assertRaises(ValueError, self.cam.get_frame_generator, 1, 0)
+            self.assertRaises(ValueError, self.cam.get_frame_generator, 1, -1)
 
             self.cam.start_streaming(dummy_frame_handler, 5)
 
             self.assertRaises(VimbaCameraError, self.cam.get_frame)
-
-            iter_ = self.cam.get_frame_iter(1)
-            self.assertRaises(VimbaCameraError, iter_.__next__)
+            self.assertRaises(VimbaCameraError, next, self.cam.get_frame_generator(1))
 
             # Stop Streaming: Everything should be fine.
             self.cam.stop_streaming()
             self.assertNoRaise(self.cam.get_frame)
-
-            iter_ = self.cam.get_frame_iter(1)
-            self.assertNoRaise(iter_.__next__)
+            self.assertNoRaise(next, self.cam.get_frame_generator(1))
 
     def test_camera_get_frame(self):
         # Expectation: Gets single Frame without any exception. Image data must be set.
@@ -191,29 +187,29 @@ class CamCameraTest(unittest.TestCase):
             self.assertEqual(type(self.cam.get_frame()), Frame)
 
     def test_camera_capture_error_outside_vimba_scope(self):
-        # Expectation: Camera access outside of Vimba scope must lead to a VimbaCameraError
-        frame_iter = None
+        # Expectation: Camera access outside of Vimba scope must lead to a RuntimeError
+        gener = None
 
         with self.cam:
-            frame_iter = self.cam.get_frame_iter(1)
+            gener = self.cam.get_frame_generator(1)
 
         # Shutdown API
         self.vimba._shutdown()
 
         # Access invalid Iterator
-        self.assertRaises(VimbaCameraError, frame_iter.__next__)
+        self.assertRaises(RuntimeError, next, gener)
 
     def test_camera_capture_error_outside_camera_scope(self):
-        # Expectation: Camera access outside of Camera scope must lead to a VimbaCameraError
-        frame_iter = None
+        # Expectation: Camera access outside of Camera scope must lead to a RuntimeError
+        gener = None
 
         with self.cam:
-            frame_iter = self.cam.get_frame_iter(1)
+            gener = self.cam.get_frame_generator(1)
 
-        self.assertRaises(VimbaCameraError, frame_iter.__next__)
+        self.assertRaises(RuntimeError, next, gener)
 
     def test_camera_capture_timeout(self):
-        # Expectation: Camera access outside of Camera scope must lead to a VimbaCameraError
+        # Expectation: Camera access outside of Camera scope must lead to a VimbaTimeout
         with self.cam:
             self.assertRaises(VimbaTimeout, self.cam.get_frame, 1)
 
@@ -324,8 +320,8 @@ class CamCameraTest(unittest.TestCase):
             self.assertRaises(TypeError, self.cam.get_features_selected_by, 'No Feature')
             self.assertRaises(TypeError, self.cam.get_features_by_type, 0.0)
             self.assertRaises(TypeError, self.cam.get_feature_by_name, 0)
-            self.assertRaises(TypeError, self.cam.get_frame_iter, '3')
-            self.assertRaises(TypeError, self.cam.get_frame_iter, 0, 'foo')
+            self.assertRaises(TypeError, self.cam.get_frame_generator, '3')
+            self.assertRaises(TypeError, self.cam.get_frame_generator, 0, 'foo')
             self.assertRaises(TypeError, self.cam.start_streaming, valid_handler, 'no int')
             self.assertRaises(TypeError, self.cam.start_streaming, invalid_handler_1)
             self.assertRaises(TypeError, self.cam.start_streaming, invalid_handler_2)
@@ -419,7 +415,7 @@ class CamCameraTest(unittest.TestCase):
         self.assertRaises(RuntimeError, self.cam.get_features_by_type)
         self.assertRaises(RuntimeError, self.cam.get_features_by_category)
         self.assertRaises(RuntimeError, self.cam.get_feature_by_name)
-        self.assertRaises(RuntimeError, self.cam.get_frame_iter)
+        self.assertRaises(RuntimeError, self.cam.get_frame_generator)
         self.assertRaises(RuntimeError, self.cam.get_frame)
         self.assertRaises(RuntimeError, self.cam.start_streaming)
         self.assertRaises(RuntimeError, self.cam.stop_streaming)

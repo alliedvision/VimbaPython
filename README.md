@@ -1,7 +1,7 @@
 ﻿Vimba Python API - Beta version for testing purposes only
 ===============
 
-***Beta version for testing purposes only ***
+***Beta version for testing purposes only***
 
 You are welcome to give feedback on the beta version of our new Vimba Python API!
 Please note that the usage of beta software is at your own risk.
@@ -12,12 +12,24 @@ This helps us improve the Vimba Python API.
 
 NEW - we have updated VimbaPython with the following improvements:
 
+Version 0.3.0:
+
+* Introduced attribute-based feature access
+* Enabled direct numpy access to image data for most available pixel formats
+* Improved synchronous frame acquisition performance
+* Multi-user camera usage via IPv4 multicast (GigE only)
+* Camera lookup via IPv4 / MAC-Address (GigE only)
+* Compatibility with Windows 32-bit
+
+Version 0.2.0:
+
 * Multi-threading example
 * Improved usability by raising an exception if a function that is only valid inside a with – statement is called outside with – scope.
 * Method get_camera_by_id() supports camera lookup via IP or MAC address for GigE cameras
 * Method get_version() outputs the version of VimbaPython, VimbaC, and Vimba Image Transform
 * Improved test support for using several different cameras
 
+VimbaPython version 0.1.0 users:   
 Before using the updated VimbaPython version, please deinstall VimbaPython:
 
         python -m pip uninstall VimbaPython
