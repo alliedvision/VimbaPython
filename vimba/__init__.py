@@ -33,7 +33,7 @@ THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 # Suppress 'imported but unused' - Error from static style checker.
 # flake8: noqa: F401
 
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 
 __all__ = [
     'Vimba',
