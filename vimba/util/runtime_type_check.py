@@ -146,7 +146,7 @@ class RuntimeTypeCheckEnable:
         except AttributeError:
             return False
 
-        if arg is ():
+        if arg == ():
             return True
 
         if Ellipsis in type_hint.__args__:

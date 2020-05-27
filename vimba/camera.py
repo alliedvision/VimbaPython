@@ -317,17 +317,21 @@ def _frame_generator(cam, limit: Optional[int], timeout_ms: int):
     cnt = 0
 
     try:
-        # Enter Capturing mode
-        exc = fsm.enter_capturing_mode()
-        if exc:
-            raise exc
-
         while True if limit is None else cnt < limit:
-            cnt += 1
+            # Enter Capturing mode
+            exc = fsm.enter_capturing_mode()
+            if exc:
+                raise exc
+
             fsm.wait_for_frames(timeout_ms)
 
             # Return copy of internally used frame to keep them independent.
-            yield copy.deepcopy(frames[0])
+            frame_copy = copy.deepcopy(frames[0])
+            fsm.leave_capturing_mode()
+            frame_copy._frame.frameID = cnt
+            cnt += 1
+
+            yield frame_copy
 
     finally:
         # Leave Capturing mode
@@ -352,6 +356,7 @@ class Camera:
         self.__feats: FeaturesTuple = ()
         self.__context_cnt: int = 0
         self.__capture_fsm: Optional[_CaptureFsm] = None
+        self._disconnected = False
 
     @TraceEnable()
     def __enter__(self):
@@ -734,7 +739,7 @@ class Camera:
     @TraceEnable()
     def is_streaming(self) -> bool:
         """Returns True if the camera is currently in streaming mode. If not, returns False."""
-        return self.__capture_fsm is not None
+        return self.__capture_fsm is not None and not self._disconnected
 
     @TraceEnable()
     @RaiseIfOutsideContext()
@@ -928,7 +933,7 @@ class Camera:
     @TraceEnable()
     @LeaveContextOnCall()
     def _close(self):
-        if self.is_streaming:
+        if self.is_streaming():
             self.stop_streaming()
 
         for feat in self.__feats:
@@ -942,7 +947,10 @@ class Camera:
 
     def __frame_cb_wrapper(self, _: VmbHandle, raw_frame_ptr: VmbFrame):   # coverage: skip
         # Skip coverage because it can't be measured. This is called from C-Context.
-        assert self.__capture_fsm is not None
+
+        # ignore callback if camera has been disconnected
+        if self.__capture_fsm is None:
+            return
 
         context = self.__capture_fsm.get_context()
 

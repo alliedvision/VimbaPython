@@ -97,11 +97,15 @@ def main():
     cam_id = parse_args()
 
     with Vimba.get_instance():
+        print("--> Vimba has been started")
+
         with get_camera(cam_id) as cam:
+            print("--> Camera has been opened (%s)" % cam.get_id())
 
             # Save camera settings to file.
             settings_file = '{}_settings.xml'.format(cam.get_id())
             cam.save_settings(settings_file, PersistType.All)
+            print ("--> Feature values have been saved to '%s'" % settings_file)
 
             # Restore settings to initial value.
             try:
@@ -112,12 +116,14 @@ def main():
 
             try:
                 cam.UserSetLoad.run()
+                print("--> All feature values have been restored to default")
 
             except (AttributeError, VimbaFeatureError):
                 abort('Failed to run Feature \'UserSetLoad\'')
 
             # Load camera settings from file.
             cam.load_settings(settings_file, PersistType.All)
+            print("--> Feature values have been loaded from given file '%s'" % settings_file)
 
 
 if __name__ == '__main__':

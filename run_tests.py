@@ -65,10 +65,10 @@ def unit_test(testsuite, testcamera, blacklist):
 
     fprint('Execute Unit tests and measure coverage:')
     if testsuite == 'basic':
-        cmd = 'coverage run Test/runner.py -s basic -o console {}'.format(blacklist)
+        cmd = 'coverage run Tests/runner.py -s basic -o console {}'.format(blacklist)
 
     else:
-        cmd = 'coverage run Test/runner.py -s {} -c {} -o console {}'
+        cmd = 'coverage run Tests/runner.py -s {} -c {} -o console {}'
         cmd = cmd.format(testsuite, testcamera, blacklist)
 
     subprocess.run(cmd, shell=True)
@@ -110,11 +110,11 @@ def unit_test_junit(report_dir, testsuite, testcamera, blacklist):
 
     blacklist = " ".join(blacklist)
     if testsuite == 'basic':
-        cmd = 'coverage run --branch Test/runner.py -s basic -o junit_xml {} {}'
+        cmd = 'coverage run --branch Tests/runner.py -s basic -o junit_xml {} {}'
         cmd = cmd.format(report_dir, blacklist)
 
     else:
-        cmd = 'coverage run --branch Test/runner.py -s {} -c {} -o junit_xml {} {}'
+        cmd = 'coverage run --branch Tests/runner.py -s {} -c {} -o junit_xml {} {}'
         cmd = cmd.format(testsuite, testcamera, report_dir, blacklist)
 
     subprocess.run(cmd, shell=True)

@@ -123,12 +123,13 @@ def main():
         runner = xmlrunner.XMLTestRunner(output=args['REPORT_DIR'])
 
     # Import tests cases
-    import tests.c_binding_test
-    import tests.util_runtime_type_check_test
-    import tests.util_tracer_test
-    import tests.util_context_decorator_test
-    import tests.vimba_test
-    import tests.interface_test
+    import basic_tests.c_binding_test
+    import basic_tests.util_runtime_type_check_test
+    import basic_tests.util_tracer_test
+    import basic_tests.util_context_decorator_test
+    import basic_tests.vimba_common_test
+    import basic_tests.vimba_test
+    import basic_tests.interface_test
 
     import real_cam_tests.vimba_test
     import real_cam_tests.feature_test
@@ -138,12 +139,13 @@ def main():
 
     # Assign test cases to test suites
     BASIC_TEST_MODS = [
-        tests.c_binding_test,
-        tests.util_runtime_type_check_test,
-        tests.util_tracer_test,
-        tests.util_context_decorator_test,
-        tests.vimba_test,
-        tests.interface_test
+        basic_tests.c_binding_test,
+        basic_tests.util_runtime_type_check_test,
+        basic_tests.util_tracer_test,
+        basic_tests.util_context_decorator_test,
+        basic_tests.vimba_common_test,
+        basic_tests.vimba_test,
+        basic_tests.interface_test
     ]
 
     REAL_CAM_TEST_MODS = [

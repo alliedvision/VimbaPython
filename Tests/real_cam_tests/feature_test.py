@@ -537,9 +537,9 @@ class CamFloatFeatureTest(unittest.TestCase):
 
             # Within bounds (no error)
             self.assertNoRaise(self.feat_rw.set, min_)
-            self.assertEqual(self.feat_rw.get(), min_)
+            self.assertAlmostEqual(self.feat_rw.get(), min_)
             self.assertNoRaise(self.feat_rw.set, max_)
-            self.assertEqual(self.feat_rw.get(), max_)
+            self.assertAlmostEqual(self.feat_rw.get(), max_)
 
             # Out of bounds (must raise)
             self.assertRaises(VimbaFeatureError, self.feat_rw.set, min_ - delta)

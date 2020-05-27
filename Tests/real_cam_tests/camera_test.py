@@ -357,7 +357,7 @@ class CamCameraTest(unittest.TestCase):
         valid_paths = (
             'valid1.xml',
             os.path.join('.', 'valid2.xml'),
-            os.path.join('Test', 'valid3.xml'),
+            os.path.join('Tests', 'valid3.xml'),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'valid4.xml'),
         )
 
@@ -373,7 +373,7 @@ class CamCameraTest(unittest.TestCase):
         valid_paths = (
             'valid1.xml',
             os.path.join('.', 'valid2.xml'),
-            os.path.join('Test', 'valid3.xml'),
+            os.path.join('Tests', 'valid3.xml'),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'valid4.xml'),
         )
 

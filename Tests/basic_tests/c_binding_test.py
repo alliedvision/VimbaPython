@@ -250,7 +250,7 @@ class VimbaCTest(unittest.TestCase):
 
     def test_call_vimba_c_valid(self):
         # Expectation for valid call: No exceptions, no errors
-        expected_ver_info = (1, 8, 1)
+        expected_ver_info = (1, 8, 2)
         ver_info = VmbVersionInfo()
 
         call_vimba_c('VmbVersionQuery', byref(ver_info), sizeof(ver_info))

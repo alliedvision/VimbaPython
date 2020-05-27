@@ -114,6 +114,14 @@ then
     exit 1
 fi
 
+# get path to setup.py file
+SOURCEDIR="$(find -name setup.py -type f -printf '%h' -quit)"
+if [ -z "$SOURCEDIR" ]
+then
+    echo "Error: setup.py not found. Abort"
+    exit 1
+fi
+
 PYTHONS=$(get_python_versions)
 
 if [ -z "$PYTHONS" ]
@@ -222,9 +230,9 @@ echo ""
 # Execute installation via pip
 if [ -z $TARGET ]
 then
-    TARGET="."
+    TARGET="$SOURCEDIR"
 else
-    TARGET=".[$TARGET]"
+    TARGET="$SOURCEDIR[$TARGET]"
 fi
 
 $PYTHON -m pip install $TARGET

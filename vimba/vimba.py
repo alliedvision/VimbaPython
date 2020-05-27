@@ -535,6 +535,7 @@ class Vimba:
             elif event == CameraEvent.Missing:
                 with self.__cams_lock:
                     cam = [c for c in self.__cams if cam_id == c.get_id()].pop()
+                    cam._disconnected = True
                     self.__cams.remove(cam)
 
                 log.info('Removed camera \"{}\" from active cameras'.format(cam_id))
