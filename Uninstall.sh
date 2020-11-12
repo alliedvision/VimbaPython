@@ -25,47 +25,91 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# THE SOFTWARE IS PRELIMINARY AND STILL IN TESTING AND VERIFICATION PHASE AND
-# IS PROVIDED ON AN “AS IS” AND “AS AVAILABLE” BASIS AND IS BELIEVED TO CONTAIN DEFECTS.
-# A PRIMARY PURPOSE OF THIS EARLY ACCESS IS TO OBTAIN FEEDBACK ON PERFORMANCE AND
-# THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
+
+# global parameters parsed from command line flags 
+DEBUG=false
+
+while getopts "d" flag; do
+  case "${flag}" in
+    d) DEBUG=true ;;
+    *) ;;
+  esac
+done
+
+function inside_virtual_env
+{
+    if [ -z "$VIRTUAL_ENV" ]; then
+        echo "false"
+    else
+        echo "true"
+    fi
+}
+
 
 function get_python_versions
 {
-    for P in $(whereis -b python | tr " " "\n" | grep "python[[:digit:]]\?\.\?[[:digit:]]\?\.\?[[:digit:]]\?$")
-    do
-        PYTHON=$P
+    DETECTED_PYTHONS=()
 
-        # 1) Remove results that are links
-        if [ -L $PYTHON ]
+    # Check if the script was run from a virtual environment and set search path for binary accordingly
+    if [ "$(inside_virtual_env)" = true ]; then
+        if [ "$DEBUG" = true ] ; then
+            echo "Detected active virtual environment" >&2
+        fi
+        SEARCH_PATH="$VIRTUAL_ENV"/bin
+    else
+        if [ "$DEBUG" = true ] ; then
+            echo "No virtual environment detected" >&2
+        fi
+        SEARCH_PATH=$(echo "$PATH" | tr ":" " ")
+    fi
+
+    if [ "$DEBUG" = true ] ; then
+        echo "Searching for python in $SEARCH_PATH" >&2
+    fi
+
+    # iterate over all detected python binaries and check if they are viable installations
+    for P in $(whereis -b -B $SEARCH_PATH -f python | tr " " "\n" | grep "python[[:digit:]]\.[[:digit:]]\.\?[[:digit:]]\?$" | sort -V)
+    do
+        # 1) Remove results that are links (venv executables are often links so we allow those)
+        if [ -L "$P" ] && [ "$(inside_virtual_env)" = false ]
         then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P was a link" >&2
+            fi
             continue
         fi
 
         # 2) Remove results that are directories
-        if [ -d $PYTHON ]
+        if [ -d "$P" ]
         then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P was a directory" >&2
+            fi
             continue
         fi
 
         # 3) Remove results that offer no pip support.
-        $PYTHON -m pip > /dev/null 2>&1
+        $P -m pip > /dev/null 2>&1
         if [ $? -ne 0 ]
         then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P did not have pip support" >&2
+            fi
             continue 
         fi
 
-        # 4) Remove results there VimbaPython is not installed
-        if [ $($PYTHON -m pip list | grep "VimbaPython" | wc -l) -ne 1 ]
+        # 4) Remove results where VimbaPython is not installed
+        if [ $($P -m pip list --format=columns | grep "VimbaPython" | wc -l) -ne 1 ]
         then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P did not have VimbaPython installed" >&2
+            fi
             continue
         fi
-
-        echo -n "$PYTHON "
+        DETECTED_PYTHONS+=("$P")
     done
+    echo "${DETECTED_PYTHONS[@]}"
 }
-
 echo "#################################"
 echo "# VimbaPython uninstall script. #"
 echo "#################################"
@@ -74,9 +118,9 @@ echo "#################################"
 # Perform sanity checks #
 #########################
 
-if [ $UID -ne 0 ]
+if [ $UID -ne 0 ] && [ "$(inside_virtual_env)" = false ]
 then
-    echo "Error: Installation requires root privileges. Abort."
+    echo "Error: Uninstallation requires root privileges. Abort."
     exit 1
 fi
 
@@ -85,7 +129,7 @@ PWD=${PWD##*/}
 
 if [[ "$PWD" != "VimbaPython" ]]
 then
-    echo "Error: Please execute Install.sh within VimbaPython directory."
+    echo "Error: Please execute Uninstall.sh within VimbaPython directory."
     exit 1
 fi
 
@@ -93,10 +137,9 @@ PYTHONS=$(get_python_versions)
 
 if [ -z "$PYTHONS" ]
 then
-    echo "Can't remove VimbaPython. Is not installed."
+    echo "Can't remove VimbaPython. No installation was found."
     exit 0
 fi
-
 
 #############################################
 # Determine python to uninstall VimbaPython #
@@ -182,7 +225,7 @@ do
     echo ""
     echo "Remove VimbaPython for $P"
 
-    yes | $P -m pip uninstall VimbaPython
+    $P -m pip uninstall --yes VimbaPython
 
     if [ $? -eq 0 ]
     then

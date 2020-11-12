@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # BSD 2-Clause License
 #
@@ -25,12 +25,16 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# THE SOFTWARE IS PRELIMINARY AND STILL IN TESTING AND VERIFICATION PHASE AND
-# IS PROVIDED ON AN “AS IS” AND “AS AVAILABLE” BASIS AND IS BELIEVED TO CONTAIN DEFECTS.
-# A PRIMARY PURPOSE OF THIS EARLY ACCESS IS TO OBTAIN FEEDBACK ON PERFORMANCE AND
-# THE IDENTIFICATION OF DEFECT SOFTWARE, HARDWARE AND DOCUMENTATION.
 
+# global parameters parsed from command line flags 
+DEBUG=false
+
+while getopts "d" flag; do
+  case "${flag}" in
+    d) DEBUG=true ;;
+    *) ;;
+  esac
+done
 
 function get_bool_input()
 {
@@ -42,7 +46,7 @@ function get_bool_input()
 
     while [[ "$ANSWER" != "$TRUTHY" ]] && [[ "$ANSWER" != "$FALSY" ]]
     do
-        echo -n $QUESTION
+        echo -n "$QUESTION"
         read ANSWER
 
         # Use Default value if it was supplied and the input was empty.
@@ -62,33 +66,82 @@ function get_bool_input()
     [[ "$ANSWER" == "$TRUTHY" ]]
 }
 
+function inside_virtual_env
+{
+    if [ -z "$VIRTUAL_ENV" ]; then
+        echo "false"
+    else
+        echo "true"
+    fi
+}
+
 function get_python_versions
 {
-    for P in $(whereis -b python | tr " " "\n" | grep "python[[:digit:]]\?\.\?[[:digit:]]\?\.\?[[:digit:]]\?$")
-    do
-        PYTHON=$P
+    DETECTED_PYTHONS=()
 
-        # 1) Remove results that are links
-        if [ -L $PYTHON ]
+    # Check if the script was run from a virtual environment and set search path for binary accordingly
+    if [ "$(inside_virtual_env)" = true ]; then
+        if [ "$DEBUG" = true ] ; then
+            echo "Detected active virtual environment" >&2
+        fi
+        SEARCH_PATH="$VIRTUAL_ENV"/bin
+    else
+        if [ "$DEBUG" = true ] ; then
+            echo "No virtual environment detected" >&2
+        fi
+        SEARCH_PATH=$(echo "$PATH" | tr ":" " ")
+    fi
+
+    if [ "$DEBUG" = true ] ; then
+        echo "Searching for python in $SEARCH_PATH" >&2
+    fi
+
+    # iterate over all detected python binaries and check if they are viable installations
+    for P in $(whereis -b -B $SEARCH_PATH -f python | tr " " "\n" | grep "python[[:digit:]]\.[[:digit:]]\.\?[[:digit:]]\?$" | sort -V)
+    do
+        # 1) Remove results that are links (venv executables are often links so we allow those)
+        if [ -L "$P" ] && [ "$(inside_virtual_env)" = false ]
         then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P was a link" >&2
+            fi
             continue
         fi
 
         # 2) Remove results that are directories
-        if [ -d $PYTHON ]
+        if [ -d "$P" ]
         then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P was a directory" >&2
+            fi
             continue
         fi
 
-        # 3) Remove results that offer no pip support.
-        $PYTHON -m pip > /dev/null 2>&1
-        if [ $? -ne 0 ]
-        then
-            continue 
+        # 3) Remove incompatible versions (<3.7)
+        # patch is ignored but has to be parsed in case the binary name contains it
+        FILENAME=$(basename -- "$P")
+        read -r MAJOR MINOR PATCH < <(echo $FILENAME | tr -dc "0-9." | tr "." " ")
+        if [ $MAJOR -gt 3 ] || { [ $MAJOR -eq 3 ] && [ $MINOR -ge 7 ]; }; then
+            : # the interperter is compatible
+        else
+            if [ "$DEBUG" = true ] ; then
+                echo "$P is not compatible. VimbaPython requires python >=3.7" >&2
+            fi
+            continue
         fi
 
-        echo -n "$PYTHON "
+        # 4) Remove results that offer no pip support.
+        $P -m pip > /dev/null 2>&1
+        if [ $? -ne 0 ]
+        then
+            if [ "$DEBUG" = true ] ; then
+                echo "$P did not have pip support" >&2
+            fi
+            continue 
+        fi
+        DETECTED_PYTHONS+=("$P")
     done
+    echo "${DETECTED_PYTHONS[@]}"
 }
 
 echo "###############################"
@@ -99,7 +152,8 @@ echo "###############################"
 # Perform sanity checks #
 #########################
 
-if [ $UID -ne 0 ]
+# root is only required if we are not installing in a virtual environment
+if [ $UID -ne 0 ] && [ "$(inside_virtual_env)" = false ]
 then
     echo "Error: Installation requires root priviliges. Abort."
     exit 1
@@ -115,7 +169,7 @@ then
 fi
 
 # get path to setup.py file
-SOURCEDIR="$(find -name setup.py -type f -printf '%h' -quit)"
+SOURCEDIR="$(find . -name setup.py -type f -printf '%h' -quit)"
 if [ -z "$SOURCEDIR" ]
 then
     echo "Error: setup.py not found. Abort"
@@ -126,7 +180,7 @@ PYTHONS=$(get_python_versions)
 
 if [ -z "$PYTHONS" ]
 then
-    echo "Error: No Python version with pip support found. Abort."
+    echo "Error: No compatible Python version with pip support found. Abort."
     exit 1
 fi
 
@@ -153,7 +207,7 @@ do
     echo -n "Enter python version to install VimbaPython (0 - $LAST, default: 0): "
     read TMP
 
-    if [ -z $TMP ]
+    if [ -z "$TMP" ]
     then
         TMP=0
     fi
@@ -168,7 +222,7 @@ do
     fi
 
     # Verify Input range
-    if [ 0 -le $ITER -a $ITER -le $LAST ]
+    if [ 0 -le $ITER ] && [ $ITER -le $LAST ]
     then
         break
 
@@ -219,7 +273,7 @@ then
     then
         TARGET="opencv-export"
     else
-        TARGET=$TARGET,opencv-export
+        TARGET="$TARGET,opencv-export"
     fi
     echo "Installing VimbaPython with OpenCV support."
 else
@@ -235,7 +289,7 @@ else
     TARGET="$SOURCEDIR[$TARGET]"
 fi
 
-$PYTHON -m pip install $TARGET
+$PYTHON -m pip install "$TARGET"
 
 if [ $? -eq 0 ]
 then
