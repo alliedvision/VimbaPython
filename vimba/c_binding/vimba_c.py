@@ -572,7 +572,7 @@ class VmbFeaturePersistSettings(ctypes.Structure):
 G_VIMBA_C_HANDLE = VmbHandle(1)
 
 VIMBA_C_VERSION = None
-EXPECTED_VIMBA_C_VERSION = '1.8.3'
+EXPECTED_VIMBA_C_VERSION = '1.8.5'
 
 # For detailed information on the signatures see "VimbaC.h"
 # To improve readability, suppress 'E501 line too long (> 100 characters)'

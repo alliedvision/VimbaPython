@@ -100,7 +100,7 @@ def main():
             # Save camera settings to file.
             settings_file = '{}_settings.xml'.format(cam.get_id())
             cam.save_settings(settings_file, PersistType.All)
-            print ("--> Feature values have been saved to '%s'" % settings_file)
+            print("--> Feature values have been saved to '%s'" % settings_file)
 
             # Restore settings to initial value.
             try:

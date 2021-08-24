@@ -462,7 +462,9 @@ def _query_compatibility(pixel_format: VmbPixelFormat) -> Tuple[VmbPixelFormat, 
                             VmbPixelLayout.RGBA, VmbPixelLayout.BGRA)
 
     output_bits_per_pixel = (8, 16)
-    output_layouts = tuple([(l, b) for l in output_pixel_layouts for b in output_bits_per_pixel])
+    output_layouts = tuple([(layouts, bits)
+                            for layouts in output_pixel_layouts
+                            for bits in output_bits_per_pixel])
 
     result: List[VmbPixelFormat] = []
 

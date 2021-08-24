@@ -51,7 +51,7 @@ def static_test():
     fprint('')
 
     fprint('Execute Static Test: mypy')
-    subprocess.run('mypy vimba', shell=True)
+    subprocess.run('mypy vimba', shell=True, check=True)
     fprint('')
 
 
@@ -66,11 +66,11 @@ def unit_test(testsuite, testcamera, blacklist):
         cmd = 'coverage run Tests/runner.py -s {} -c {} -o console {}'
         cmd = cmd.format(testsuite, testcamera, blacklist)
 
-    subprocess.run(cmd, shell=True)
+    subprocess.run(cmd, shell=True, check=True)
     fprint('')
 
     fprint('Coverage during test execution:')
-    subprocess.run('coverage report -m', shell=True)
+    subprocess.run('coverage report -m', shell=True, check=True)
     fprint('')
 
     coverage_file = '.coverage'
@@ -88,15 +88,15 @@ def setup_junit(report_dir):
 def static_test_junit(report_dir):
     fprint('Execute Static Test: flake8')
     cmd = 'flake8 vimba --output-file=' + report_dir + '/flake8.txt'
-    subprocess.run(cmd, shell=True)
+    subprocess.run(cmd, shell=True, check=True)
 
     cmd = 'flake8_junit ' + report_dir + '/flake8.txt ' + report_dir + '/flake8_junit.xml'
-    subprocess.run(cmd, shell=True)
+    subprocess.run(cmd, shell=True, check=True)
     fprint('')
 
     fprint('Execute Static Test: mypy')
     cmd = 'mypy vimba --junit-xml ' + report_dir + '/mypy_junit.xml'
-    subprocess.run(cmd, shell=True)
+    subprocess.run(cmd, shell=True, check=True)
     fprint('')
 
 
@@ -112,12 +112,12 @@ def unit_test_junit(report_dir, testsuite, testcamera, blacklist):
         cmd = 'coverage run --branch Tests/runner.py -s {} -c {} -o junit_xml {} {}'
         cmd = cmd.format(testsuite, testcamera, report_dir, blacklist)
 
-    subprocess.run(cmd, shell=True)
+    subprocess.run(cmd, shell=True, check=True)
     fprint('')
 
     fprint('Generate Coverage reports:')
-    subprocess.run('coverage report -m', shell=True)
-    subprocess.run('coverage xml -o ' + report_dir + '/coverage.xml', shell=True)
+    subprocess.run('coverage report -m', shell=True, check=True)
+    subprocess.run('coverage xml -o ' + report_dir + '/coverage.xml', shell=True, check=True)
     fprint('')
 
     coverage_file = '.coverage'

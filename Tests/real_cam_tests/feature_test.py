@@ -793,13 +793,12 @@ class CamStringFeatureTest(unittest.TestCase):
 
         # Ensure Expectation 3
         try:
-            valid = 'a' * (self.feat_rw.get_max_length() -1)
+            valid = 'a' * (self.feat_rw.get_max_length() - 1)
             self.assertNoRaise(self.feat_rw.set, valid)
             self.assertEqual(valid, self.feat_rw.get())
 
         finally:
             self.feat_rw.set(old_val)
-
 
     def test_set_in_callback(self):
         # Expectation: Setting a value within a Callback must raise a VimbaFeatureError

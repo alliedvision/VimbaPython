@@ -244,7 +244,7 @@ def read_memory(handle: VmbHandle, addr: int, max_bytes: int) -> bytes:  # cover
         msg = 'Memory read access at {} failed with C-Error: {}.'
         raise ValueError(msg.format(hex(addr), repr(e.get_error_code()))) from e
 
-    return buf.value[:bytesRead.value]
+    return buf.raw[:bytesRead.value]
 
 
 @TraceEnable()

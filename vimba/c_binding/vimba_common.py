@@ -564,7 +564,9 @@ def _load_under_windows(vimba_project: str):
 
         # Load Library with 32 Bit and use stdcall call convention
         else:
-            lib = ctypes.windll.LoadLibrary(lib_path)
+            # Tell mypy to ignore this line to allow type checking on both windows and linux as
+            # windll is not available on linux and would therefore produce an error there
+            lib = ctypes.windll.LoadLibrary(lib_path)  # type: ignore
 
     except OSError as e:
         msg = 'Failed to load library \'{}\'. Please verify Vimba installation.'

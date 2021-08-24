@@ -29,6 +29,7 @@ import setuptools
 import os
 import re
 
+
 def read_file(name):
     with open(file=name, mode='r', encoding='utf-8') as file:
         return file.read()
@@ -38,6 +39,7 @@ def get_version(file_content):
     result = re.search(r'{}\s*=\s*[\'"]([^\'"]*)[\'"]'.format('__version__'),
                        file_content)
     return result.group(1)
+
 
 name = 'VimbaPython'
 version = get_version(read_file(os.path.join('.', 'vimba', '__init__.py')))
