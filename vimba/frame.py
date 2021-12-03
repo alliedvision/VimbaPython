@@ -31,7 +31,7 @@ import copy
 import functools
 
 from typing import Optional, Tuple
-from .c_binding import create_string_buffer, byref, sizeof, decode_flags
+from .c_binding import byref, sizeof, decode_flags
 from .c_binding import call_vimba_c, call_vimba_image_transform, VmbFrameStatus, VmbFrameFlags, \
                        VmbFrame, VmbHandle, VmbPixelFormat, VmbImage, VmbDebayerMode, \
                        VmbTransformInfo, PIXEL_FORMAT_CONVERTIBILITY_MAP, PIXEL_FORMAT_TO_LAYOUT
@@ -46,7 +46,7 @@ try:
     import numpy  # type: ignore
 
 except ModuleNotFoundError:
-    numpy = None
+    numpy = None  # type: ignore
 
 
 __all__ = [
@@ -419,6 +419,17 @@ class FrameStatus(enum.IntEnum):
     Invalid = VmbFrameStatus.Invalid
 
 
+class AllocationMode(enum.IntEnum):
+    """Enum specifying the supported frame allocation modes.
+
+    Enum values:
+        AnnounceFrame         - The buffer is allocated by VimbaPython
+        AllocAndAnnounceFrame - The buffer is allocated by the Transport Layer
+    """
+    AnnounceFrame = 0
+    AllocAndAnnounceFrame = 1
+
+
 class AncillaryData:
     """Ancillary Data are created after enabling a Cameras 'ChunkModeActive' Feature.
     Ancillary Data are Features stored within a Frame.
@@ -577,14 +588,25 @@ class Frame:
     """This class allows access to Frames acquired by a camera. The Frame is basically
     a buffer that wraps image data and some metadata.
     """
-    def __init__(self, buffer_size: int):
+    def __init__(self, buffer_size: int, allocation_mode: AllocationMode):
         """Do not call directly. Create Frames via Camera methods instead."""
-        self._buffer = create_string_buffer(buffer_size)
+        self._allocation_mode = allocation_mode
+
+        # Allocation is not necessary for the AllocAndAnnounce case. In that case the Transport
+        # Layer will take care of buffer allocation. The self._buffer variable will be updated after
+        # the frame is announced and memory has been allocated.
+        if self._allocation_mode == AllocationMode.AnnounceFrame:
+            self._buffer = (ctypes.c_ubyte * buffer_size)()
         self._frame: VmbFrame = VmbFrame()
 
         # Setup underlaying Frame
-        self._frame.buffer = ctypes.cast(self._buffer, ctypes.c_void_p)
-        self._frame.bufferSize = sizeof(self._buffer)
+        if self._allocation_mode == AllocationMode.AnnounceFrame:
+            self._frame.buffer = ctypes.cast(self._buffer, ctypes.c_void_p)
+            self._frame.bufferSize = sizeof(self._buffer)
+        elif self._allocation_mode == AllocationMode.AllocAndAnnounceFrame:
+            # Set buffer pointer to NULL and inform Transport Layer of size it should allocate
+            self._frame.buffer = None
+            self._frame.bufferSize = buffer_size
 
     def __str__(self):
         msg = 'Frame(id={}, status={}, buffer={})'
@@ -606,6 +628,14 @@ class Frame:
         result._frame.bufferSize = sizeof(result._buffer)
 
         return result
+
+    def _set_buffer(self, buffer: ctypes.c_void_p):
+        """Set self._buffer to memory pointed to by passed buffer pointer
+
+        Useful if frames were allocated with AllocationMode.AllocAndAnnounce
+        """
+        self._buffer = ctypes.cast(buffer,
+                                   ctypes.POINTER(ctypes.c_ubyte * self._frame.bufferSize)).contents
 
     def get_buffer(self) -> ctypes.Array:
         """Get internal buffer object containing image data."""
@@ -785,7 +815,7 @@ class Frame:
         img_size = int(height * width * c_dst_image.ImageInfo.PixelInfo.BitsPerPixel / 8)
         anc_size = self._frame.ancillarySize
 
-        buf = create_string_buffer(img_size + anc_size)
+        buf = (ctypes.c_ubyte * (img_size + anc_size))()
         c_dst_image.Data = ctypes.cast(buf, ctypes.c_void_p)
 
         # 5) Setup Debayering mode if given.
@@ -846,7 +876,8 @@ class Frame:
         bits_per_channel = layout[1]
         channels_per_pixel = c_image.ImageInfo.PixelInfo.BitsPerPixel // bits_per_channel
 
-        return numpy.ndarray(shape=(height, width, channels_per_pixel), buffer=self._buffer,
+        return numpy.ndarray(shape=(height, width, channels_per_pixel),
+                             buffer=self._buffer,  # type: ignore
                              dtype=numpy.uint8 if bits_per_channel == 8 else numpy.uint16)
 
     def as_opencv_image(self) -> 'numpy.ndarray':

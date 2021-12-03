@@ -28,7 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # Suppress 'imported but unused' - Error from static style checker.
 # flake8: noqa: F401
 
-__version__ = '1.1.0'
+__version__ = '1.2.0'
 
 __all__ = [
     'Vimba',
@@ -46,6 +46,7 @@ __all__ = [
     'FeatureTypes',
     'FrameHandler',
     'FrameStatus',
+    'AllocationMode',
     'Debayer',
     'intersect_pixel_formats',
     'MONO_PIXEL_FORMATS',
@@ -109,7 +110,8 @@ from .interface import Interface, InterfaceType, InterfaceChangeHandler, Interfa
 from .frame import PixelFormat, Frame, Debayer, intersect_pixel_formats, MONO_PIXEL_FORMATS, \
                    BAYER_PIXEL_FORMATS, RGB_PIXEL_FORMATS, RGBA_PIXEL_FORMATS, BGR_PIXEL_FORMATS, \
                    BGRA_PIXEL_FORMATS, YUV_PIXEL_FORMATS, YCBCR_PIXEL_FORMATS, \
-                   COLOR_PIXEL_FORMATS, OPENCV_PIXEL_FORMATS, FrameStatus, FeatureTypes
+                   COLOR_PIXEL_FORMATS, OPENCV_PIXEL_FORMATS, FrameStatus, FeatureTypes, \
+                   AllocationMode
 
 from .error import VimbaSystemError, VimbaCameraError, VimbaInterfaceError, VimbaFeatureError, \
                    VimbaFrameError, VimbaTimeout

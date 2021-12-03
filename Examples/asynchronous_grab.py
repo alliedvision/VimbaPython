@@ -26,7 +26,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import sys
-from typing import Optional
+from typing import Optional, Tuple
 from vimba import *
 
 
@@ -38,10 +38,11 @@ def print_preamble():
 
 def print_usage():
     print('Usage:')
-    print('    python asynchronous_grab.py [camera_id]')
+    print('    python asynchronous_grab.py [/x] [-x] [camera_id]')
     print('    python asynchronous_grab.py [/h] [-h]')
     print()
     print('Parameters:')
+    print('    /x, -x      If set, use AllocAndAnnounce mode of buffer allocation')
     print('    camera_id   ID of the camera to use (using first camera if not specified)')
     print()
 
@@ -55,19 +56,25 @@ def abort(reason: str, return_code: int = 1, usage: bool = False):
     sys.exit(return_code)
 
 
-def parse_args() -> Optional[str]:
+def parse_args() -> Tuple[Optional[str], AllocationMode]:
     args = sys.argv[1:]
     argc = len(args)
 
+    allocation_mode = AllocationMode.AnnounceFrame
+    cam_id = ""
     for arg in args:
         if arg in ('/h', '-h'):
             print_usage()
             sys.exit(0)
+        elif arg in ('/x', '-x'):
+            allocation_mode = AllocationMode.AllocAndAnnounceFrame
+        elif not cam_id:
+            cam_id = arg
 
-    if argc > 1:
+    if argc > 2:
         abort(reason="Invalid number of arguments. Abort.", return_code=2, usage=True)
 
-    return None if argc == 0 else args[0]
+    return (cam_id if cam_id else None, allocation_mode)
 
 
 def get_camera(camera_id: Optional[str]) -> Camera:
@@ -108,7 +115,7 @@ def frame_handler(cam: Camera, frame: Frame):
 
 def main():
     print_preamble()
-    cam_id = parse_args()
+    cam_id, allocation_mode = parse_args()
 
     with Vimba.get_instance():
         with get_camera(cam_id) as cam:
@@ -118,7 +125,7 @@ def main():
 
             try:
                 # Start Streaming with a custom a buffer of 10 Frames (defaults to 5)
-                cam.start_streaming(handler=frame_handler, buffer_count=10)
+                cam.start_streaming(handler=frame_handler, buffer_count=10, allocation_mode=allocation_mode)
                 input()
 
             finally:

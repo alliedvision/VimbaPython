@@ -41,7 +41,7 @@ from .shared import filter_features_by_name, filter_features_by_type, filter_aff
                     filter_selected_features, filter_features_by_category, \
                     attach_feature_accessors, remove_feature_accessors, read_memory, \
                     write_memory, read_registers, write_registers
-from .frame import Frame, FormatTuple, PixelFormat
+from .frame import Frame, FormatTuple, PixelFormat, AllocationMode
 from .util import Log, TraceEnable, RuntimeTypeCheckEnable, EnterContextOnCall, \
                   LeaveContextOnCall, RaiseIfInsideContext, RaiseIfOutsideContext
 from .error import VimbaSystemError, VimbaCameraError, VimbaTimeout, VimbaFeatureError
@@ -135,6 +135,9 @@ class _StateInit(_State):
             try:
                 call_vimba_c('VmbFrameAnnounce', self.context.cam_handle, byref(frame_handle),
                              sizeof(frame_handle))
+                if frame._allocation_mode == AllocationMode.AllocAndAnnounceFrame:
+                    assert frame_handle.buffer is not None
+                    frame._set_buffer(frame_handle.buffer)
 
             except VimbaCError as e:
                 return _build_camera_error(self.context.cam, e)
@@ -302,12 +305,12 @@ class _CaptureFsm:
 
 
 @TraceEnable()
-def _frame_generator(cam, limit: Optional[int], timeout_ms: int):
+def _frame_generator(cam, limit: Optional[int], timeout_ms: int, allocation_mode: AllocationMode):
     if cam.is_streaming():
         raise VimbaCameraError('Operation not supported while streaming.')
 
     frame_data_size = cam.get_feature_by_name('PayloadSize').get()
-    frames = (Frame(frame_data_size), )
+    frames = (Frame(frame_data_size, allocation_mode), )
     fsm = _CaptureFsm(_Context(cam, frames, None, None))
     cnt = 0
 
@@ -613,7 +616,10 @@ class Camera:
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def get_frame_generator(self, limit: Optional[int] = None, timeout_ms: int = 2000):
+    def get_frame_generator(self,
+                            limit: Optional[int] = None,
+                            timeout_ms: int = 2000,
+                            allocation_mode: AllocationMode = AllocationMode.AnnounceFrame):
         """Construct frame generator, providing synchronous image acquisition.
 
         The Frame generator acquires a new frame with each execution.
@@ -623,6 +629,8 @@ class Camera:
                     the generator will produce an unlimited amount of images and must be
                     stopped by the user supplied code.
             timeout_ms - Timeout in milliseconds of frame acquisition.
+            allocation_mode - Allocation mode deciding if buffer allocation should be done by
+                              VimbaPython or the Transport Layer
 
         Returns:
             Frame generator expression
@@ -640,16 +648,20 @@ class Camera:
         if timeout_ms <= 0:
             raise ValueError('Given Timeout {} is not > 0'.format(timeout_ms))
 
-        return _frame_generator(self, limit, timeout_ms)
+        return _frame_generator(self, limit, timeout_ms, allocation_mode)
 
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def get_frame(self, timeout_ms: int = 2000) -> Frame:
+    def get_frame(self,
+                  timeout_ms: int = 2000,
+                  allocation_mode: AllocationMode = AllocationMode.AnnounceFrame) -> Frame:
         """Get single frame from camera. Synchronous frame acquisition.
 
         Arguments:
             timeout_ms - Timeout in milliseconds of frame acquisition.
+            allocation_mode - Allocation mode deciding if buffer allocation should be done by
+                              VimbaPython or the Transport Layer
 
         Returns:
             Frame from camera
@@ -660,12 +672,15 @@ class Camera:
             ValueError if a timeout_ms is negative.
             VimbaTimeout if Frame acquisition timed out.
         """
-        return next(self.get_frame_generator(1, timeout_ms))
+        return next(self.get_frame_generator(1, timeout_ms, allocation_mode))
 
     @TraceEnable()
     @RaiseIfOutsideContext()
     @RuntimeTypeCheckEnable()
-    def start_streaming(self, handler: FrameHandler, buffer_count: int = 5):
+    def start_streaming(self,
+                        handler: FrameHandler,
+                        buffer_count: int = 5,
+                        allocation_mode: AllocationMode = AllocationMode.AnnounceFrame):
         """Enter streaming mode
 
         Enter streaming mode is also known as asynchronous frame acquisition.
@@ -675,6 +690,8 @@ class Camera:
         Arguments:
             handler - Callable that is executed on each acquired frame.
             buffer_count - Number of frames supplied as internal buffer.
+            allocation_mode - Allocation mode deciding if buffer allocation should be done by
+                              VimbaPython or the Transport Layer
 
         Raises:
             TypeError if parameters do not match their type hint.
@@ -691,7 +708,7 @@ class Camera:
 
         # Setup capturing fsm
         payload_size = self.get_feature_by_name('PayloadSize').get()
-        frames = tuple([Frame(payload_size) for _ in range(buffer_count)])
+        frames = tuple([Frame(payload_size, allocation_mode) for _ in range(buffer_count)])
         callback = build_callback_type(None, VmbHandle, POINTER(VmbFrame))(self.__frame_cb_wrapper)
 
         self.__capture_fsm = _CaptureFsm(_Context(self, frames, handler, callback))
