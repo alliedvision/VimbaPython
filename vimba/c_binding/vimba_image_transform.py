@@ -356,7 +356,11 @@ def _check_version(lib_handle):
 
     VIMBA_IMAGE_TRANSFORM_VERSION = '{}.{}'.format((v.value >> 24) & 0xff, (v.value >> 16) & 0xff)
 
-    if (VIMBA_IMAGE_TRANSFORM_VERSION != EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION):
+    loaded_version = tuple(map(int, VIMBA_IMAGE_TRANSFORM_VERSION.split(".")))
+    expected_version = tuple(map(int, EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION.split(".")))
+    # Major version must match. minor version may be equal or greater
+    if not(loaded_version[0] == expected_version[0] and
+           loaded_version[1] >= expected_version[1]):
         msg = 'Invalid VimbaImageTransform Version: Expected: {}, Found:{}'
         raise VimbaSystemError(msg.format(EXPECTED_VIMBA_IMAGE_TRANSFORM_VERSION,
                                           VIMBA_IMAGE_TRANSFORM_VERSION))

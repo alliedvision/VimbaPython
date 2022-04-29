@@ -252,7 +252,8 @@ class VimbaCTest(unittest.TestCase):
 
         ver_info = (ver_info.major, ver_info.minor, ver_info.patch)
 
-        self.assertEqual(ver_info, expected_ver_info)
+        # Not an actual check for compatibility. Just make sure a sensible value was filled
+        self.assertGreaterEqual(ver_info, expected_ver_info)
 
     def test_call_vimba_c_invalid_func_name(self):
         # Expectation: An invalid function name must throw an AttributeError
