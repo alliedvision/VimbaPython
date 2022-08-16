@@ -2,7 +2,7 @@
 
 # BSD 2-Clause License
 #
-# Copyright (c) 2019, Allied Vision Technologies GmbH
+# Copyright (c) 2019-2022, Allied Vision Technologies GmbH
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -69,7 +69,14 @@ function get_bool_input()
 function inside_virtual_env
 {
     if [ -z "$VIRTUAL_ENV" ]; then
-        echo "false"
+        # No virtualenv or venv. Detect a conda env
+        if [ -z "$CONDA_PREFIX" ]; then
+            echo "false"
+        else
+            # Treat conda env the same as a virtualenv or venv
+            VIRTUAL_ENV=$CONDA_PREFIX
+            echo "true"
+        fi
     else
         echo "true"
     fi
